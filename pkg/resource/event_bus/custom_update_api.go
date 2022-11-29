@@ -38,11 +38,7 @@ func (rm *resourceManager) customUpdateEventBus(
 			return nil, err
 		}
 	}
-	readOneLatest, err := rm.ReadOne(ctx, desired)
-	if err != nil {
-		return nil, err
-	}
-	return rm.concreteResource(readOneLatest), nil
+	return desired, nil
 }
 
 // syncEventBusTags updates event bus tags

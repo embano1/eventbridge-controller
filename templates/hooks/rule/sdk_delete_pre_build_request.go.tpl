@@ -1,5 +1,5 @@
 
-listReq := svcsdk.ListTargetsByRuleInput{
+	listReq := svcsdk.ListTargetsByRuleInput{
 		EventBusName: r.ko.Spec.EventBusName,
 		Rule:         r.ko.Spec.Name,
 	}

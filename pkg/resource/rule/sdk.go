@@ -131,6 +131,9 @@ func (rm *resourceManager) sdkFind(
 	}
 
 	rm.setStatusDefaults(ko)
+	if err := rm.setResourceAdditionalFields(ctx, ko); err != nil {
+		return nil, err
+	}
 	return &resource{ko}, nil
 }
 
@@ -141,6 +144,7 @@ func (rm *resourceManager) requiredFieldsMissingFromReadOneInput(
 	r *resource,
 ) bool {
 	return r.ko.Spec.Name == nil
+
 }
 
 // newDescribeRequestPayload returns SDK-specific struct for the HTTP request
@@ -286,14 +290,6 @@ func (rm *resourceManager) sdkUpdate(
 	if err != nil {
 		return nil, err
 	}
-
-	req := svcsdk.PutTargetsInput{
-		EventBusName: desired.ko.Spec.EventBusName,
-		Rule:         desired.ko.Spec.Name,
-		Targets:      desired.ko.Spec.Targets,
-	}
-	// rm.sdkapi.PutTargetsWithContext(ctx)
-
 	// Merge in the information we read from the API call above to the copy of
 	// the original Kubernetes object we passed to the function
 	ko := desired.ko.DeepCopy()
@@ -474,7 +470,7 @@ func (rm *resourceManager) updateConditions(
 			}
 			ko.Status.Conditions = append(ko.Status.Conditions, terminalCondition)
 		}
-		errorMessage := ""
+		var errorMessage = ""
 		if err == ackerr.SecretTypeNotSupported || err == ackerr.SecretNotFound || errors.As(err, &termError) {
 			errorMessage = err.Error()
 		} else {
@@ -543,11 +539,11 @@ func (rm *resourceManager) getImmutableFieldChanges(
 	delta *ackcompare.Delta,
 ) []string {
 	var fields []string
-	if delta.DifferentAt("Spec.EventBusName") {
-		fields = append(fields, "EventBusName")
-	}
 	if delta.DifferentAt("Spec.Name") {
 		fields = append(fields, "Name")
+	}
+	if delta.DifferentAt("Spec.EventBusName") {
+		fields = append(fields, "EventBusName")
 	}
 
 	return fields
