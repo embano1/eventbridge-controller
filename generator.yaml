@@ -1,8 +1,91 @@
+# TODO Project
+# [] CRD custom printer columns - currently not possible
+# [] E2E
+# [x] update event bus (allow tag modifications)
+# [] verify immutability - currently not possible
+# [x] CRD shortnames
+# [] empty spec is allowed (so required name check is skipped)
+# [] ackerr.NotImplemented does not lead to terminal err condition
+# [] If you are updating an existing rule, any tags you specify in the PutRule operation are ignored. To update the tags of an existing rule, use TagResource and UntagResource.
+# [] Before you can delete the rule, you must remove all targets, using RemoveTargets.
+# [] not in GA: discuss with users whether to allow "force" when deleting targets from a managed rule (and even to delete managed rule) (use CR annotation)
+# [] make default eventbus "" in putrule required instead of empty string for explicitness?
+
 ignore:
   resource_names:
-      - ApiDestination
-      - Archive
-      - Connection
-      - Endpoint
-      - EventBus
-      - PartnerEventSource
+    - ApiDestination
+    - Archive
+    - Connection
+    - Endpoint
+    #    - EventBus
+    - PartnerEventSource
+operations:
+  PutRule:
+    operation_type:
+      - Create
+      - Update
+    resource_name: Rule
+resources:
+  EventBus:
+    fields:
+      Name:
+        is_immutable: true
+      EventBusName:
+        is_immutable: true
+    shortNames:
+      - eb # event bus
+      - bus
+    print:
+      add_age_column: true
+      add_synced_column: true
+    update_operation:
+      custom_method_name: customUpdateEventBus
+    exceptions:
+      errors:
+        403:
+          code: ResourceAlreadyExistsException
+        404:
+          code: ResourceNotFoundException # make this terminal?
+        409:
+          code: ConcurrentModificationException
+        429:
+          code: LimitExceededException
+      terminal_codes:
+        #- ResourceAlreadyExistsException
+  Rule:
+    fields:
+      EventBusName:
+        is_immutable: true # seems to not affect EventBusRef
+        references:
+          resource: EventBus
+          path: Spec.Name
+      Name:
+        is_immutable: true
+      Targets:
+        custom_field:
+          list_of: Target # how can I add comment to the generated code?
+#      Targets.ARN: <- does not currently work
+#        is_required: true
+    hooks:
+      sdk_create_pre_build_request:
+        template_path: hooks/rule/sdk_create_pre_build_request.go.tpl
+      sdk_update_pre_build_request:
+        template_path: hooks/rule/sdk_create_pre_build_request.go.tpl
+      sdk_delete_pre_build_request:
+        template_path: hooks/rule/sdk_delete_pre_build_request.go.tpl
+    shortNames:
+      - er # event rule
+    print:
+      add_age_column: true
+      add_synced_column: true
+    exceptions:
+      errors:
+        404:
+          code: ResourceNotFoundException
+        409:
+          code: ConcurrentModificationException
+        429:
+          code: LimitExceededException
+      terminal_codes:
+        - InvalidEventPatternException
+        - ManagedRuleException # we don't support force because those rules are not managed by ACK
