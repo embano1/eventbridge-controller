@@ -206,6 +206,16 @@ func (rm *resourceManager) sdkCreate(
 	}
 
 	rm.setStatusDefaults(ko)
+	if len(ko.Spec.Targets) > 0 {
+		err := rm.syncRuleTargets(
+			ctx,
+			ko.Spec.Name, ko.Spec.EventBusName,
+			ko.Spec.Targets, nil,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &resource{ko}, nil
 }
 
@@ -273,11 +283,28 @@ func (rm *resourceManager) sdkUpdate(
 		msg := fmt.Sprintf("Immutable Spec fields have been modified: %s", strings.Join(immutableFieldChanges, ","))
 		return nil, ackerr.NewTerminalError(fmt.Errorf(msg))
 	}
-
 	if err = validateRuleSpec(desired.ko.Spec); err != nil {
 		return nil, ackerr.NewTerminalError(err)
 	}
-
+	if delta.DifferentAt("Spec.Tags") {
+		err = rm.syncRuleTags(ctx, desired, latest)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if delta.DifferentAt("Spec.Targets") {
+		err = rm.syncRuleTargets(
+			ctx,
+			desired.ko.Spec.Name, desired.ko.Spec.EventBusName,
+			desired.ko.Spec.Targets, latest.ko.Spec.Targets,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if !delta.DifferentExcept("Spec.Tags", "Spec.Targets") {
+		return desired, nil
+	}
 	input, err := rm.newUpdateRequestPayload(ctx, desired)
 	if err != nil {
 		return nil, err
@@ -363,8 +390,15 @@ func (rm *resourceManager) sdkDelete(
 	defer func() {
 		exit(err)
 	}()
-	if _, err := rm.preDeleteRule(ctx, &resource{r.ko}); err != nil {
-		return nil, err
+	if len(r.ko.Spec.Targets) > 0 {
+		err := rm.syncRuleTargets(
+			ctx,
+			r.ko.Spec.Name, r.ko.Spec.EventBusName,
+			nil, r.ko.Spec.Targets,
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 	input, err := rm.newDeleteRequestPayload(r)
 	if err != nil {
@@ -523,11 +557,11 @@ func (rm *resourceManager) getImmutableFieldChanges(
 
 	return fields
 }
-func sdkTargetsFromResource(
-	r *resource,
+func sdkTargetsFromResourceTargets(
+	targets []*svcapitypes.Target,
 ) []*svcsdk.Target {
 	var res []*svcsdk.Target
-	for _, krTarget := range r.ko.Spec.Targets {
+	for _, krTarget := range targets {
 		t := &svcsdk.Target{}
 		if krTarget.ARN != nil {
 			t.SetArn(*krTarget.ARN)

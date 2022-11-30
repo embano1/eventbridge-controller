@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws-controllers-k8s/eventbridge-controller/apis/v1alpha1"
 	svcapitypes "github.com/aws-controllers-k8s/eventbridge-controller/apis/v1alpha1"
+	ackcompare "github.com/aws-controllers-k8s/runtime/pkg/compare"
 	ackrtlog "github.com/aws-controllers-k8s/runtime/pkg/runtime/log"
 	ackutil "github.com/aws-controllers-k8s/runtime/pkg/util"
 )
@@ -92,51 +93,6 @@ func (rm *resourceManager) getTags(
 		})
 	}
 	return tags, nil
-}
-
-func (rm *resourceManager) preDeleteRule(ctx context.Context, r *resource) (latest *resource, err error) {
-	listReq := svcsdk.ListTargetsByRuleInput{
-		EventBusName: r.ko.Spec.EventBusName,
-		Rule:         r.ko.Spec.Name,
-	}
-	targets, err := rm.sdkapi.ListTargetsByRuleWithContext(ctx, &listReq)
-	if err != nil {
-		return nil, err
-	}
-
-	var removeTargets []*string
-	for _, t := range targets.Targets {
-		cp := *t.Id
-		removeTargets = append(removeTargets, &cp)
-	}
-
-	removeReq := svcsdk.RemoveTargetsInput{
-		EventBusName: r.ko.Spec.EventBusName,
-		Ids:          removeTargets,
-		Rule:         r.ko.Spec.Name,
-	}
-
-	// ignoring response as partial failure would lead to reconcile with fresh input from list targets
-	_, err = rm.sdkapi.RemoveTargetsWithContext(ctx, &removeReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return nil, nil
-}
-
-func (rm *resourceManager) putRuleTargets(ctx context.Context, r *resource) (latest *resource, err error) {
-	putReq := svcsdk.PutTargetsInput{
-		EventBusName: r.ko.Spec.EventBusName,
-		Targets:      sdkTargetsFromResource(r),
-		Rule:         r.ko.Spec.Name,
-	}
-	_, err = rm.sdkapi.PutTargetsWithContext(ctx, &putReq)
-	if err != nil {
-		return nil, err
-	}
-
-	return nil, nil
 }
 
 // syncRuleTags updates event bus tags
@@ -240,4 +196,46 @@ func sdkTagStringsFromResourceTags(rTags []*svcapitypes.Tag) []*string {
 		tags[i] = rTags[i].Key
 	}
 	return tags
+}
+
+func customPreCompare(
+	delta *ackcompare.Delta,
+	a *resource,
+	b *resource,
+) {
+	if len(a.ko.Spec.Tags) != len(b.ko.Spec.Tags) {
+		delta.Add("Spec.Tags", a.ko.Spec.Tags, b.ko.Spec.Tags)
+	} else if len(a.ko.Spec.Tags) > 0 {
+		if !equalTags(a.ko.Spec.Tags, b.ko.Spec.Tags) {
+			delta.Add("Spec.Tags", a.ko.Spec.Tags, b.ko.Spec.Tags)
+		}
+	}
+
+	if len(a.ko.Spec.Targets) != len(b.ko.Spec.Targets) {
+		delta.Add("Spec.Targets", a.ko.Spec.Targets, b.ko.Spec.Targets)
+	} else if len(a.ko.Spec.Targets) > 0 {
+		if !equalTargets(a.ko.Spec.Targets, b.ko.Spec.Targets) {
+			delta.Add("Spec.Targets", a.ko.Spec.Targets, b.ko.Spec.Targets)
+		}
+	}
+}
+
+// equalTags returns true if two Tag arrays are equal regardless of the order
+// of their elements.
+func equalTags(
+	a []*svcapitypes.Tag,
+	b []*svcapitypes.Tag,
+) bool {
+	added, removed := computeTagsDelta(a, b)
+	return len(added) == 0 && len(removed) == 0
+}
+
+// equalTargets returns true if two Tag arrays are equal regardless of the order
+// of their elements.
+func equalTargets(
+	a []*svcapitypes.Target,
+	b []*svcapitypes.Target,
+) bool {
+	added, removed := computeTargetsDelta(a, b)
+	return len(added) == 0 && len(removed) == 0
 }

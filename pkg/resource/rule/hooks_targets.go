@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 
+	"github.com/aws-controllers-k8s/eventbridge-controller/apis/v1alpha1"
 	ackrtlog "github.com/aws-controllers-k8s/runtime/pkg/runtime/log"
 	ackutil "github.com/aws-controllers-k8s/runtime/pkg/util"
 	svcsdk "github.com/aws/aws-sdk-go/service/eventbridge"
@@ -34,14 +35,15 @@ func validateTargets(targets []svcapitypes.Target) error {
 // syncRuleTargets updates event bus tags
 func (rm *resourceManager) syncRuleTargets(
 	ctx context.Context,
-	desired *resource,
-	latest *resource,
+	ruleName *string,
+	eventBus *string, // name or arn
+	desired, latest []*v1alpha1.Target,
 ) (err error) {
 	rlog := ackrtlog.FromContext(ctx)
 	exit := rlog.Trace("rm.syncRuleTargets")
 	defer func(err error) { exit(err) }(err)
 
-	added, removed := computeTargetsDelta(latest.ko.Spec.Targets, desired.ko.Spec.Targets)
+	added, removed := computeTargetsDelta(latest, desired)
 
 	if len(removed) > 0 {
 		_, err = rm.sdkapi.RemoveTargetsWithContext(
@@ -49,8 +51,8 @@ func (rm *resourceManager) syncRuleTargets(
 			&svcsdk.RemoveTargetsInput{
 				// NOTE(a-hilaly,embano1): we might need to force the removal, in some cases?
 				// thinking annotations... terminal conditions...
-				Rule:         desired.ko.Spec.Name,
-				EventBusName: desired.ko.Spec.EventBusName,
+				Rule:         ruleName,
+				EventBusName: eventBus,
 				Ids:          removed,
 			})
 		rm.metrics.RecordAPICall("UPDATE", "RemoveTargets", err)
@@ -63,9 +65,9 @@ func (rm *resourceManager) syncRuleTargets(
 		_, err = rm.sdkapi.PutTargetsWithContext(
 			ctx,
 			&svcsdk.PutTargetsInput{
-				Rule:         desired.ko.Spec.Name,
-				EventBusName: desired.ko.Spec.EventBusName,
-				Targets:      sdkTargetsFromResource(desired),
+				Rule:         ruleName,
+				EventBusName: eventBus,
+				Targets:      sdkTargetsFromResourceTargets(desired),
 			})
 		rm.metrics.RecordAPICall("UPDATE", "PutTargets", err)
 		if err != nil {
