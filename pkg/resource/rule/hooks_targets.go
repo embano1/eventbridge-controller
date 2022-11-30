@@ -5,10 +5,11 @@ import (
 	"errors"
 	"reflect"
 
-	"github.com/aws-controllers-k8s/eventbridge-controller/apis/v1alpha1"
 	ackrtlog "github.com/aws-controllers-k8s/runtime/pkg/runtime/log"
 	ackutil "github.com/aws-controllers-k8s/runtime/pkg/util"
 	svcsdk "github.com/aws/aws-sdk-go/service/eventbridge"
+
+	"github.com/aws-controllers-k8s/eventbridge-controller/apis/v1alpha1"
 
 	svcapitypes "github.com/aws-controllers-k8s/eventbridge-controller/apis/v1alpha1"
 )
@@ -103,4 +104,14 @@ mainLoop:
 		}
 	}
 	return added, removed
+}
+
+// equalTargets returns true if two Tag arrays are equal regardless of the order
+// of their elements.
+func equalTargets(
+	a []*svcapitypes.Target,
+	b []*svcapitypes.Target,
+) bool {
+	added, removed := computeTargetsDelta(a, b)
+	return len(added) == 0 && len(removed) == 0
 }
