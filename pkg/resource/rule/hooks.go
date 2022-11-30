@@ -9,6 +9,7 @@ import (
 	"github.com/aws-controllers-k8s/eventbridge-controller/apis/v1alpha1"
 	svcapitypes "github.com/aws-controllers-k8s/eventbridge-controller/apis/v1alpha1"
 	ackrtlog "github.com/aws-controllers-k8s/runtime/pkg/runtime/log"
+	ackutil "github.com/aws-controllers-k8s/runtime/pkg/util"
 )
 
 func validateRuleSpec(spec v1alpha1.RuleSpec) error {
@@ -126,7 +127,7 @@ func (rm *resourceManager) preDeleteRule(ctx context.Context, r *resource) (late
 func (rm *resourceManager) putRuleTargets(ctx context.Context, r *resource) (latest *resource, err error) {
 	putReq := svcsdk.PutTargetsInput{
 		EventBusName: r.ko.Spec.EventBusName,
-		Targets:      nil,
+		Targets:      sdkTargetsFromResource(r),
 		Rule:         r.ko.Spec.Name,
 	}
 	_, err = rm.sdkapi.PutTargetsWithContext(ctx, &putReq)
@@ -135,4 +136,103 @@ func (rm *resourceManager) putRuleTargets(ctx context.Context, r *resource) (lat
 	}
 
 	return nil, nil
+}
+
+// syncRuleTags updates event bus tags
+func (rm *resourceManager) syncRuleTags(
+	ctx context.Context,
+	latest *resource,
+	desired *resource,
+) (err error) {
+	rlog := ackrtlog.FromContext(ctx)
+	exit := rlog.Trace("rm.syncRuleTags")
+	defer func(err error) { exit(err) }(err)
+
+	added, removed := computeTagsDelta(latest.ko.Spec.Tags, desired.ko.Spec.Tags)
+
+	if len(removed) > 0 {
+		_, err = rm.sdkapi.UntagResourceWithContext(
+			ctx,
+			&svcsdk.UntagResourceInput{
+				ResourceARN: (*string)(latest.ko.Status.ACKResourceMetadata.ARN),
+				TagKeys:     sdkTagStringsFromResourceTags(removed),
+			})
+
+		rm.metrics.RecordAPICall("UPDATE", "RemoveTags", err)
+		if err != nil {
+			return err
+		}
+	}
+
+	if len(added) > 0 {
+		_, err = rm.sdkapi.TagResourceWithContext(
+			ctx,
+			&svcsdk.TagResourceInput{
+				ResourceARN: (*string)(latest.ko.Status.ACKResourceMetadata.ARN),
+				Tags:        sdkTagsFromResourceTags(added),
+			})
+
+		rm.metrics.RecordAPICall("UPDATE", "AddTags", err)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// computeTagsDelta compares two Tag arrays and return two different lists
+// containing the added and removed tags.
+// The removed tags list only contains the Key of tags
+func computeTagsDelta(
+	a []*svcapitypes.Tag,
+	b []*svcapitypes.Tag,
+) (added, removed []*svcapitypes.Tag) {
+	var visitedIndexes []string
+mainLoop:
+	for _, aElement := range a {
+		visitedIndexes = append(visitedIndexes, *aElement.Key)
+		for _, bElement := range b {
+			if equalStrings(aElement.Key, bElement.Key) {
+				if !equalStrings(aElement.Value, bElement.Value) {
+					added = append(added, bElement)
+				}
+				continue mainLoop
+			}
+		}
+		removed = append(removed, aElement)
+	}
+	for _, bElement := range b {
+		if !ackutil.InStrings(*bElement.Key, visitedIndexes) {
+			added = append(added, bElement)
+		}
+	}
+	return added, removed
+}
+
+func equalStrings(a, b *string) bool {
+	if a == nil {
+		return b == nil || *b == ""
+	}
+	return (*a == "" && b == nil) || *a == *b
+}
+
+// sdkTagsFromResourceTags transforms a *svcapitypes.Tag array to a *svcsdk.Tag array.
+func sdkTagsFromResourceTags(rTags []*svcapitypes.Tag) []*svcsdk.Tag {
+	tags := make([]*svcsdk.Tag, len(rTags))
+	for i := range rTags {
+		tags[i] = &svcsdk.Tag{
+			Key:   rTags[i].Key,
+			Value: rTags[i].Value,
+		}
+	}
+	return tags
+}
+
+// sdkTagStringsFromResourceTags transforms a *svcapitypes.Tag array to a string array.
+func sdkTagStringsFromResourceTags(rTags []*svcapitypes.Tag) []*string {
+	tags := make([]*string, len(rTags))
+	for i := range rTags {
+		tags[i] = rTags[i].Key
+	}
+	return tags
 }

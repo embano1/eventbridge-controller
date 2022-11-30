@@ -363,7 +363,7 @@ func (rm *resourceManager) sdkDelete(
 	defer func() {
 		exit(err)
 	}()
-	if err := rm.preDeleteRule(ctx, ko); err != nil {
+	if _, err := rm.preDeleteRule(ctx, &resource{ko}); err != nil {
 		return nil, err
 	}
 	input, err := rm.newDeleteRequestPayload(r)
@@ -523,15 +523,10 @@ func (rm *resourceManager) getImmutableFieldChanges(
 
 	return fields
 }
-func (rm *resourceManager) KRtoSDK(
+func sdkTargetsFromResource(
 	r *resource,
-) ([]*svcsdk.Target, error) {
-	// DescribeRuleInput
+) []*svcsdk.Target {
 	var res []*svcsdk.Target
-	//
-	// {0xc000638900 { Targets Targets targets targets targets} Targets []*Target Target []*eventbridge.Target 0xc000972ea0 0xc00041b340 map[ARN:0xc000869980 BatchParameters:0xc000644780 DeadLetterConfig:0xc0006449c0 EcsParameters:0xc00057e9c0 HTTPParameters:0xc00057ee40 ID:0xc00057ef00 Input:0xc00057efc0 InputPath:0xc00057f080 InputTransformer:0xc00057f380 KinesisParameters:0xc00057f5c0 RedshiftDataParameters:0xc00057fbc0 RetryPolicy:0xc00057fec0 RoleARN:0xc0005e2000 RunCommandParameters:0xc0005e2600 SQSParameters:0xc0005e2d80 SageMakerPipelineParameters:0xc0005e2b40]}
-	// Target
-
 	for _, krTarget := range r.ko.Spec.Targets {
 		t := &svcsdk.Target{}
 		if krTarget.ARN != nil {
@@ -837,5 +832,5 @@ func (rm *resourceManager) KRtoSDK(
 
 		res = append(res, t)
 	}
-	return res, nil
+	return res
 }

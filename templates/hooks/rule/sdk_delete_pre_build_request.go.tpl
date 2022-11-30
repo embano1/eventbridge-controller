@@ -1,3 +1,3 @@
-	if err := rm.preDeleteRule(ctx, ko); err != nil {
+	if _, err := rm.preDeleteRule(ctx, &resource{ko}); err != nil {
 		return nil, err
 	}
