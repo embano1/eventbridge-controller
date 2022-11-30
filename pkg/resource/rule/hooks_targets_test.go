@@ -12,7 +12,7 @@ import (
 func Test_validateTargets(t *testing.T) {
 	tests := []struct {
 		name    string
-		targets []svcapitypes.Target
+		targets []*svcapitypes.Target
 		wantErr string
 	}{
 		{
@@ -21,7 +21,7 @@ func Test_validateTargets(t *testing.T) {
 			wantErr: "",
 		}, {
 			name: "two targets, one without id",
-			targets: []svcapitypes.Target{
+			targets: []*svcapitypes.Target{
 				{
 					ARN: aws.String("arn:1"),
 					ID:  nil,
@@ -33,7 +33,7 @@ func Test_validateTargets(t *testing.T) {
 			wantErr: "invalid target: target ID and ARN must be specified",
 		}, {
 			name: "two targets, one without arn",
-			targets: []svcapitypes.Target{
+			targets: []*svcapitypes.Target{
 				{
 					ARN: aws.String("arn:1"),
 					ID:  aws.String("id1"),
@@ -45,7 +45,7 @@ func Test_validateTargets(t *testing.T) {
 			wantErr: "invalid target: target ID and ARN must be specified",
 		}, {
 			name: "two targets, duplicate ids",
-			targets: []svcapitypes.Target{
+			targets: []*svcapitypes.Target{
 				{
 					ARN: aws.String("arn:1"),
 					ID:  aws.String("id1"),
@@ -57,7 +57,7 @@ func Test_validateTargets(t *testing.T) {
 			wantErr: "invalid target: unique target ID is already used",
 		}, {
 			name: "two valid targets, different ids same arn",
-			targets: []svcapitypes.Target{
+			targets: []*svcapitypes.Target{
 				{
 					ARN: aws.String("arn:1"),
 					ID:  aws.String("id1"),

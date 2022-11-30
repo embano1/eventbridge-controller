@@ -15,7 +15,7 @@ import (
 )
 
 // TODO(embano1): add more input validation
-func validateTargets(targets []svcapitypes.Target) error {
+func validateTargets(targets []*svcapitypes.Target) error {
 	seen := make(map[string]bool)
 
 	for _, t := range targets {
