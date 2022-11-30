@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/aws/aws-sdk-go/aws"
 	svcsdk "github.com/aws/aws-sdk-go/service/eventbridge"
 
 	"github.com/aws-controllers-k8s/eventbridge-controller/apis/v1alpha1"
@@ -214,6 +215,10 @@ func equalStrings(a, b *string) bool {
 		return b == nil || *b == ""
 	}
 	return (*a == "" && b == nil) || *a == *b
+}
+
+func equalZeroString(a *string) bool {
+	return equalStrings(a, aws.String(""))
 }
 
 // sdkTagsFromResourceTags transforms a *svcapitypes.Tag array to a *svcsdk.Tag array.

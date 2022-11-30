@@ -2,6 +2,7 @@ package rule
 
 import (
 	"context"
+	"reflect"
 
 	svcapitypes "github.com/aws-controllers-k8s/eventbridge-controller/apis/v1alpha1"
 	ackrtlog "github.com/aws-controllers-k8s/runtime/pkg/runtime/log"
@@ -61,19 +62,19 @@ func computeTargetsDelta(
 	var visitedIndexes []string
 mainLoop:
 	for _, aElement := range a {
-		visitedIndexes = append(visitedIndexes, *aElement.Key)
+		visitedIndexes = append(visitedIndexes, *aElement.ID)
 		for _, bElement := range b {
-			if equalStrings(aElement.Key, bElement.Key) {
-				if !equalStrings(aElement.Value, bElement.Value) {
+			if equalStrings(aElement.ID, bElement.ID) {
+				if !reflect.DeepEqual(aElement, bElement) {
 					added = append(added, bElement)
 				}
 				continue mainLoop
 			}
 		}
-		removed = append(removed, aElement)
+		removed = append(removed, aElement.ID)
 	}
 	for _, bElement := range b {
-		if !ackutil.InStrings(*bElement.Key, visitedIndexes) {
+		if !ackutil.InStrings(*bElement.ID, visitedIndexes) {
 			added = append(added, bElement)
 		}
 	}

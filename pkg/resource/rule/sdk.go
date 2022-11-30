@@ -363,7 +363,7 @@ func (rm *resourceManager) sdkDelete(
 	defer func() {
 		exit(err)
 	}()
-	if _, err := rm.preDeleteRule(ctx, &resource{ko}); err != nil {
+	if _, err := rm.preDeleteRule(ctx, &resource{r.ko}); err != nil {
 		return nil, err
 	}
 	input, err := rm.newDeleteRequestPayload(r)
