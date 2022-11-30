@@ -40,6 +40,7 @@ func newResourceDelta(
 		delta.Add("", a, b)
 		return delta
 	}
+	customPreCompare(delta, a, b)
 
 	if ackcompare.HasNilDifference(a.ko.Spec.Description, b.ko.Spec.Description) {
 		delta.Add("Spec.Description", a.ko.Spec.Description, b.ko.Spec.Description)
@@ -92,12 +93,6 @@ func newResourceDelta(
 		if *a.ko.Spec.State != *b.ko.Spec.State {
 			delta.Add("Spec.State", a.ko.Spec.State, b.ko.Spec.State)
 		}
-	}
-	if !reflect.DeepEqual(a.ko.Spec.Tags, b.ko.Spec.Tags) {
-		delta.Add("Spec.Tags", a.ko.Spec.Tags, b.ko.Spec.Tags)
-	}
-	if !reflect.DeepEqual(a.ko.Spec.Targets, b.ko.Spec.Targets) {
-		delta.Add("Spec.Targets", a.ko.Spec.Targets, b.ko.Spec.Targets)
 	}
 
 	return delta

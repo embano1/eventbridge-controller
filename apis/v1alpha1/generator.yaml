@@ -63,6 +63,9 @@ resources:
         references:
           resource: EventBus
           path: Spec.Name
+      Tags:
+        compare:
+          is_ignored: true
       Name:
         is_immutable: true
       Targets:
@@ -70,6 +73,8 @@ resources:
           list_of: Target # how can I add comment to the generated code?
 #      Targets.ARN: <- does not currently work
 #        is_required: true
+        compare:
+          is_ignored: true
     hooks:
       sdk_read_one_post_set_output:
         template_path: hooks/rule/sdk_read_one_post_set_output.go.tpl
@@ -83,6 +88,8 @@ resources:
         template_path: hooks/rule/sdk_delete_pre_build_request.go.tpl
       sdk_file_end:
         template_path: hooks/rule/sdk_file_end.go.tpl
+      delta_pre_compare:
+        code: customPreCompare(delta, a, b)
     shortNames:
       - er # event rule
     print:
