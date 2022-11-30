@@ -2,13 +2,34 @@ package rule
 
 import (
 	"context"
+	"errors"
 	"reflect"
 
-	svcapitypes "github.com/aws-controllers-k8s/eventbridge-controller/apis/v1alpha1"
 	ackrtlog "github.com/aws-controllers-k8s/runtime/pkg/runtime/log"
 	ackutil "github.com/aws-controllers-k8s/runtime/pkg/util"
 	svcsdk "github.com/aws/aws-sdk-go/service/eventbridge"
+
+	svcapitypes "github.com/aws-controllers-k8s/eventbridge-controller/apis/v1alpha1"
 )
+
+// TODO(embano1): add more input validation
+func validateTargets(targets []svcapitypes.Target) error {
+	seen := make(map[string]bool)
+
+	for _, t := range targets {
+		if equalZeroString(t.ID) || equalZeroString(t.ARN) {
+			return errors.New("invalid target: target ID and ARN must be specified")
+		}
+
+		if seen[*t.ID] {
+			return errors.New("invalid target: unique target ID is already used")
+		}
+
+		seen[*t.ID] = true
+	}
+
+	return nil
+}
 
 // syncRuleTargets updates event bus tags
 func (rm *resourceManager) syncRuleTargets(
@@ -26,7 +47,7 @@ func (rm *resourceManager) syncRuleTargets(
 		_, err = rm.sdkapi.RemoveTargetsWithContext(
 			ctx,
 			&svcsdk.RemoveTargetsInput{
-				//NOTE(a-hilaly,embano1): we might need to force the removal, in some cases?
+				// NOTE(a-hilaly,embano1): we might need to force the removal, in some cases?
 				// thinking annotations... terminal conditions...
 				Rule:         desired.ko.Spec.Name,
 				EventBusName: desired.ko.Spec.EventBusName,
@@ -54,7 +75,8 @@ func (rm *resourceManager) syncRuleTargets(
 	return nil
 }
 
-// computeTargetsDelta .
+// computeTargetsDelta computes the delta between the specified targets and
+// returns added and removed targets
 func computeTargetsDelta(
 	a []*svcapitypes.Target,
 	b []*svcapitypes.Target,
