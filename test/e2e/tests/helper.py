@@ -31,6 +31,16 @@ class EventbridgeValidator:
             return None
         return resp
 
+    def get_rule(self, rule_name: str) -> dict:
+        try:
+            resp = self.eventbridge_client.describe_rule(
+                Name=rule_name,
+            )
+        except Exception as e:
+            logging.debug(e)
+            return None
+        return resp
+
     def list_resource_tags(self, resource_arn: str) -> list:
         try:
             resp = self.eventbridge_client.list_tags_for_resource(
