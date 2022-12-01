@@ -1,4 +1,4 @@
-package event_bus
+package rule
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 
 var arn = v1alpha1.AWSResourceName("arn:some:bus")
 
-type ebMockAPIClient struct {
+type ebAPIMockTagClient struct {
 	eventbridgeiface.EventBridgeAPI
 	tagInput   *eventbridge.TagResourceInput
 	untagInput *eventbridge.UntagResourceInput
@@ -26,19 +26,19 @@ type ebMockAPIClient struct {
 	response   error
 }
 
-func (e *ebMockAPIClient) TagResourceWithContext(_ aws.Context, input *eventbridge.TagResourceInput, _ ...request.Option) (*eventbridge.TagResourceOutput, error) {
+func (e *ebAPIMockTagClient) TagResourceWithContext(_ aws.Context, input *eventbridge.TagResourceInput, _ ...request.Option) (*eventbridge.TagResourceOutput, error) {
 	e.calls++
 	e.tagInput = input
 	return nil, e.response
 }
 
-func (e *ebMockAPIClient) UntagResourceWithContext(_ aws.Context, input *eventbridge.UntagResourceInput, _ ...request.Option) (*eventbridge.UntagResourceOutput, error) {
+func (e *ebAPIMockTagClient) UntagResourceWithContext(_ aws.Context, input *eventbridge.UntagResourceInput, _ ...request.Option) (*eventbridge.UntagResourceOutput, error) {
 	e.calls++
 	e.untagInput = input
 	return nil, e.response
 }
 
-func Test_resourceManager_syncEventBusTags(t *testing.T) {
+func Test_resourceManager_syncRuleTags(t *testing.T) {
 	type args struct {
 		latest  *resource
 		desired *resource
@@ -208,15 +208,14 @@ func Test_resourceManager_syncEventBusTags(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			api := ebMockAPIClient{
+			api := ebAPIMockTagClient{
 				response: tt.wantErr,
 			}
 			rm := &resourceManager{
 				metrics: ackmetrics.NewMetrics("eventbridge"),
 				sdkapi:  &api,
 			}
-
-			err := rm.syncEventBusTags(context.TODO(), tt.args.latest, tt.args.desired)
+			err := rm.syncRuleTags(context.TODO(), tt.args.latest, tt.args.desired)
 			assert.Equal(t, err, tt.wantErr)
 			assert.Equal(t, tt.wantCalls, api.calls)
 			assert.DeepEqual(t, tt.wantTagInput, api.tagInput)
@@ -225,12 +224,12 @@ func Test_resourceManager_syncEventBusTags(t *testing.T) {
 	}
 }
 
-func getResource(tags ...*svcapitypes.Tag) *svcapitypes.EventBus {
-	return &svcapitypes.EventBus{
-		Spec: svcapitypes.EventBusSpec{
+func getResource(tags ...*svcapitypes.Tag) *svcapitypes.Rule {
+	return &svcapitypes.Rule{
+		Spec: svcapitypes.RuleSpec{
 			Tags: tags,
 		},
-		Status: svcapitypes.EventBusStatus{
+		Status: svcapitypes.RuleStatus{
 			ACKResourceMetadata: &v1alpha1.ResourceMetadata{
 				ARN: &arn,
 			},
