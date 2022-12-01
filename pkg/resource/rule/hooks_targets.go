@@ -68,7 +68,7 @@ func (rm *resourceManager) syncRuleTargets(
 			&svcsdk.PutTargetsInput{
 				Rule:         ruleName,
 				EventBusName: eventBus,
-				Targets:      sdkTargetsFromResourceTargets(desired),
+				Targets:      sdkTargetsFromResourceTargets(added),
 			})
 		rm.metrics.RecordAPICall("UPDATE", "PutTargets", err)
 		if err != nil {
