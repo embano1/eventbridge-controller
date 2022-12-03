@@ -10,6 +10,7 @@
 # [] Before you can delete the rule, you must remove all targets, using RemoveTargets.
 # [] not in GA: discuss with users whether to allow "force" when deleting targets from a managed rule (and even to delete managed rule) (use CR annotation)
 # [] make default eventbus "" in putrule required instead of empty string for explicitness?
+# [] ask Rishi how JSON event patterns are handled in API (spaces, order, etc ignored when creating/updating a rule pattern?)
 
 ignore:
   resource_names:
