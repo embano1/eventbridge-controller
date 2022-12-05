@@ -1,11 +1,14 @@
 package e2e
 
 import (
+	"fmt"
 	"testing"
 
+	"github.com/aws-controllers-k8s/runtime/apis/core/v1alpha1"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	svcsdk "github.com/aws/aws-sdk-go/service/eventbridge"
+	sqssvcsdk "github.com/aws/aws-sdk-go/service/sqs"
 	"gotest.tools/v3/assert"
 	"k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -54,11 +57,42 @@ func eventBusFor(name, namespace string, tags ...*eventbridge.Tag) eventbridge.E
 	}
 }
 
-func sdkClient(t *testing.T) *svcsdk.EventBridge {
+func ruleFor(name, namespace, bus, pattern string, targets []*eventbridge.Target, tags ...*eventbridge.Tag) eventbridge.Rule {
+	return eventbridge.Rule{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: eventbridge.RuleSpec{
+			EventBusRef: &v1alpha1.AWSResourceReferenceWrapper{
+				From: &v1alpha1.AWSResourceReference{
+					Name: aws.String(bus),
+				},
+			},
+			EventPattern: aws.String(pattern),
+			Name:         aws.String(name),
+			Tags:         tags,
+			Targets:      targets,
+		},
+	}
+}
+
+func ebSDKClient(t *testing.T) *svcsdk.EventBridge {
 	s, err := session.NewSession(&aws.Config{
 		Region: aws.String(envCfg.Region),
 	})
 	assert.NilError(t, err, "create eventbridge service client")
 
 	return svcsdk.New(s)
+}
+
+func sqsSDKClient() (*sqssvcsdk.SQS, error) {
+	s, err := session.NewSession(&aws.Config{
+		Region: aws.String(envCfg.Region),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create aws session: %w", err)
+	}
+
+	return sqssvcsdk.New(s), nil
 }

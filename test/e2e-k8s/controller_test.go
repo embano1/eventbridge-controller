@@ -33,19 +33,17 @@ const (
 	ackNamespace       = "ack-system"
 )
 
-var testBusName = envconf.RandomName("bus-test", 12)
+const (
+	testEventPattern = `{"detail-type": ["ack-e2e-testevent"]}`
+)
 
 func TestSuite(t *testing.T) {
-	tags := []*ebv1alpha1.Tag{{
-		Key:   aws.String("ack"),
-		Value: aws.String("true"),
-	}}
-
 	tests := features.New("EventBridge Controller").
 		Setup(createController()).
 		Assess("controller is running", controllerRunning()).
 		Assess("create event bus", createEventBus(tags)).
 		Assess("event bus has synced", eventBusSynced(tags)).
+		Assess("create rule", createRule(testRuleName, testBusName, tags)).
 		Feature()
 
 	testEnv.Test(t, tests)
@@ -118,9 +116,32 @@ func createEventBus(tags []*ebv1alpha1.Tag) func(ctx context.Context, t *testing
 		err = ebv1alpha1.AddToScheme(r.GetScheme())
 		assert.NilError(t, err)
 
-		r.WithNamespace(crNamespace)
-		bus := eventBusFor(testBusName, crNamespace, tags...)
+		r.WithNamespace(testNamespace)
+		bus := eventBusFor(testBusName, testNamespace, tags...)
 		err = r.Create(ctx, &bus)
+		assert.NilError(t, err)
+
+		return ctx
+	}
+}
+
+func createRule(name, bus string, tags []*ebv1alpha1.Tag) func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		r, err := resources.New(c.Client().RESTConfig())
+		if err != nil {
+			t.Fail()
+		}
+		err = ebv1alpha1.AddToScheme(r.GetScheme())
+		assert.NilError(t, err)
+
+		targets := []*ebv1alpha1.Target{{
+			ARN: aws.String(queueARN),
+			ID:  aws.String(queueName),
+		}}
+
+		r.WithNamespace(testNamespace)
+		rule := ruleFor(name, testNamespace, bus, testEventPattern, targets, tags...)
+		err = r.Create(ctx, &rule)
 		assert.NilError(t, err)
 
 		return ctx
@@ -136,8 +157,8 @@ func eventBusSynced(tags []*ebv1alpha1.Tag) func(ctx context.Context, t *testing
 		assert.NilError(t, err)
 
 		var bus ebv1alpha1.EventBus
-		r.WithNamespace(crNamespace)
-		err = r.Get(ctx, testBusName, crNamespace, &bus)
+		r.WithNamespace(testNamespace)
+		err = r.Get(ctx, testBusName, testNamespace, &bus)
 		assert.NilError(t, err)
 
 		syncedCondition := conditions.New(r).ResourceMatch(&bus, func(bus k8s.Object) bool {
@@ -152,7 +173,7 @@ func eventBusSynced(tags []*ebv1alpha1.Tag) func(ctx context.Context, t *testing
 		err = wait.For(syncedCondition, wait.WithTimeout(time.Minute))
 		assert.NilError(t, err)
 
-		sdk := sdkClient(t)
+		sdk := ebSDKClient(t)
 		resp, err := sdk.DescribeEventBus(&eventbridge.DescribeEventBusInput{
 			Name: aws.String(testBusName),
 		})
