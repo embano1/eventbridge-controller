@@ -4,6 +4,7 @@ go 1.17
 
 require (
 	github.com/aws-controllers-k8s/runtime v0.20.1
+	github.com/aws/aws-lambda-go v1.36.0
 	github.com/aws/aws-sdk-go v1.44.112
 	github.com/go-logr/logr v1.2.0
 	github.com/kelseyhightower/envconfig v1.4.0
@@ -70,7 +71,7 @@ require (
 	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.24.0 // indirect
 	k8s.io/component-base v0.24.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20220328201542-3ee0da9b0b42 // indirect

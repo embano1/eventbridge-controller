@@ -42,8 +42,6 @@ var (
 	queueURL  string
 
 	testNamespace string
-	testBusName   string
-	testRuleName  string
 	tags          []*ebv1alpha1.Tag
 )
 
@@ -59,8 +57,6 @@ func TestMain(m *testing.M) {
 
 	testNamespace = envconf.RandomName("ack-e2e", 20)
 	queueName = envconf.RandomName("ack-e2e-queue", 20)
-	testBusName = envconf.RandomName("ack-bus-e2e", 20)
-	testRuleName = envconf.RandomName("ack-rule-e2e", 20)
 
 	tags = []*ebv1alpha1.Tag{{
 		Key:   aws.String("ack-e2e"),
@@ -71,15 +67,14 @@ func TestMain(m *testing.M) {
 	testEnv.Setup(
 		createSQSTestQueue(queueName, tags),
 		envfuncs.CreateKindCluster(envCfg.KindCluster),
-		envfuncs.CreateNamespace(testNamespace),
+		envfuncs.CreateNamespace(testNamespace), // namespace for ack-system created from config files
 		envfuncs.SetupCRDs(baseCRDPath, "*"),
 		envfuncs.SetupCRDs(commonCRDPath, "*"),
 	)
 
 	testEnv.Finish(
-		/*envfuncs.DeleteNamespace(ackNamespace),
-		envfuncs.TeardownCRDs(baseCRDPath, "*"),
-		envfuncs.DestroyKindCluster(kindClusterName),*/
+		envfuncs.DeleteNamespace(testNamespace),
+		envfuncs.DeleteNamespace(ackNamespace),
 		destroySQSTestQueue(),
 	)
 
@@ -102,6 +97,9 @@ func createSQSTestQueue(name string, tags []*ebv1alpha1.Tag) env.Func {
 		resp, err := sqssdk.CreateQueue(&sqs.CreateQueueInput{
 			QueueName: aws.String(name),
 			Tags:      sqstags,
+			Attributes: map[string]*string{
+				"Policy": aws.String(sqsPolicy),
+			},
 		})
 		if err != nil {
 			return ctx, fmt.Errorf("create sqs queue: %w", err)
@@ -146,3 +144,21 @@ func destroySQSTestQueue() env.Func {
 		return ctx, nil
 	}
 }
+
+const sqsPolicy = `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "events.amazonaws.com"
+      },
+      "Resource": "arn:aws:sqs:*",
+      "Action": [
+        "sqs:GetQueueAttributes",
+        "sqs:GetQueueUrl",
+        "sqs:SendMessage"
+      ]
+    }
+  ]
+}`
