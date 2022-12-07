@@ -50,21 +50,48 @@ func TestSuite(t *testing.T) {
 	testBusName = envconf.RandomName("ack-bus-e2e", 20)
 	testRuleName = envconf.RandomName("ack-rule-e2e", 20)
 
-	tests := features.New("EventBridge E2E").
+	ctrl := features.New("EventBridge Controller").
 		Setup(createController()).
-		Assess("controller is running", controllerRunning()).
-		Assess("create event bus", createEventBus(testBusName, testNamespace, tags)).
-		Assess("event bus has synced", eventBusSynced(testBusName, testNamespace, tags)).
-		Assess("create rule", createRule(testRuleName, testNamespace, testBusName, tags)).
-		Assess("rule has synced", ruleSynced(testRuleName, testNamespace, testBusName, tags)).
-		Assess("event received in sqs", eventReceived(testBusName)).
-		Assess("delete test resources", deleteTestResources(testRuleName, testBusName, testNamespace)).
+		Assess("controller running without leader election", controllerRunning()).
 		Feature()
 
-	testEnv.Test(t, tests)
+	bus := features.New("EventBridge Event Bus CRUD").
+		Assess("create event bus", createEventBus(testBusName, tags)).
+		Assess("event bus has synced", eventBusSynced(testBusName, tags)).
+		Assess("update event bus", updateEventBus(testBusName)).
+		Assess("delete event bus", deleteBus(testBusName)).
+		Feature()
+
+	rule := features.New("EventBridge Rule CRUD").
+		Setup(setupBus(testBusName, tags)).
+		Assess("create rule", createRule(testRuleName, testBusName, tags)).
+		Assess("rule has synced", ruleSynced(testRuleName, testBusName, tags)).
+		Assess("update rule", updateRule(testRuleName, testBusName)).
+		Assess("delete rule", deleteRule(testRuleName, testBusName)).
+		Teardown(deleteBus(testBusName)).
+		Feature()
+
+	/*	invalidRule := features.New("EventBridge Rule invalid in terminal state").
+		Setup(setupBus(testBusName, tags)).
+		Assess("create invalid rule", createRule(testRuleName, testBusName, tags)).
+		Assess("rule is in terminal state", ruleSynced(testRuleName, testBusName, tags)).
+		Assess("delete rule", deleteRule(testRuleName, testBusName)).
+		Teardown(deleteBus(testBusName)).
+		Feature()*/
+
+	e2e := features.New("EventBridge E2E").
+		Setup(setupBus(testBusName, tags)).
+		Assess("create rule", createRule(testRuleName, testBusName, tags)).
+		Assess("rule has synced", ruleSynced(testRuleName, testBusName, tags)).
+		Assess("event received in sqs", eventReceived(testBusName)).
+		Assess("delete rule", deleteRule(testRuleName, testBusName)).
+		Teardown(deleteBus(testBusName)).
+		Feature()
+
+	testEnv.Test(t, ctrl, bus, rule, e2e)
 }
 
-func createController() func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+func createController() features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		klog.V(1).Info("creating eventbridge controller")
 		r, err := resources.New(c.Client().RESTConfig())
@@ -92,7 +119,7 @@ func createController() func(ctx context.Context, t *testing.T, c *envconf.Confi
 		err = decoder.DecodeEachFile(
 			ctx, os.DirFS(controllerFilePath), filterPattern,
 			decoder.CreateHandler(r),
-			mutateController(envCfg.CtrlImage, awsEnvs),
+			mutateController(envCfg.CtrlImage, awsEnvs), // update manifest values for test
 		)
 		assert.NilError(t, err)
 
@@ -106,7 +133,7 @@ func createController() func(ctx context.Context, t *testing.T, c *envconf.Confi
 	}
 }
 
-func controllerRunning() func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+func controllerRunning() features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		client, err := c.NewClient()
 		assert.NilError(t, err)
@@ -123,8 +150,26 @@ func controllerRunning() func(ctx context.Context, t *testing.T, c *envconf.Conf
 	}
 }
 
-func createEventBus(name, namespace string, tags []*ebv1alpha1.Tag) func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+// wrapper around event bus create and has synced
+func setupBus(name string, tags []*ebv1alpha1.Tag) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		steps := []features.Func{
+			createEventBus(name, tags),
+			eventBusSynced(name, tags),
+		}
+
+		for _, step := range steps {
+			step(ctx, t, c)
+		}
+
+		return ctx
+	}
+}
+
+func createEventBus(name string, tags []*ebv1alpha1.Tag) features.Func {
+	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		namespace := getTestNamespaceFromContext(ctx, t)
+
 		r, err := resources.New(c.Client().RESTConfig())
 		if err != nil {
 			t.Fail()
@@ -141,8 +186,10 @@ func createEventBus(name, namespace string, tags []*ebv1alpha1.Tag) func(ctx con
 	}
 }
 
-func eventBusSynced(name, namespace string, tags []*ebv1alpha1.Tag) func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+func eventBusSynced(name string, tags []*ebv1alpha1.Tag) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		namespace := getTestNamespaceFromContext(ctx, t)
+
 		r, err := resources.New(c.Client().RESTConfig())
 		assert.NilError(t, err)
 
@@ -178,13 +225,13 @@ func eventBusSynced(name, namespace string, tags []*ebv1alpha1.Tag) func(ctx con
 		})
 		assert.NilError(t, err)
 
-		tagMap := make(map[string]string)
+		serviceTags := make(map[string]string)
 		for _, tag := range listResp.Tags {
-			tagMap[*tag.Key] = *tag.Value
+			serviceTags[*tag.Key] = *tag.Value
 		}
 
 		for _, tag := range tags {
-			v, ok := tagMap[*tag.Key]
+			v, ok := serviceTags[*tag.Key]
 			assert.Equal(t, true, ok, "compare tags: tag not found")
 			assert.Equal(t, *tag.Value, v, "compare tags: tag value mismatch")
 		}
@@ -193,8 +240,81 @@ func eventBusSynced(name, namespace string, tags []*ebv1alpha1.Tag) func(ctx con
 	}
 }
 
-func createRule(name, namespace, bus string, tags []*ebv1alpha1.Tag) func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+// replaces existing tags with an array of new tags
+func updateEventBus(name string) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		namespace := getTestNamespaceFromContext(ctx, t)
+
+		r, err := resources.New(c.Client().RESTConfig())
+		assert.NilError(t, err)
+
+		err = ebv1alpha1.AddToScheme(r.GetScheme())
+		assert.NilError(t, err)
+
+		var bus ebv1alpha1.EventBus
+		r.WithNamespace(namespace)
+		err = r.Get(ctx, name, namespace, &bus)
+		assert.NilError(t, err)
+
+		// replace tags with three new tags
+		newTags := make([]*ebv1alpha1.Tag, 3)
+		for i := 0; i < 3; i++ {
+			newTags[i] = &ebv1alpha1.Tag{
+				Key:   aws.String(fmt.Sprintf("newtag-%d", i)),
+				Value: aws.String(fmt.Sprintf("newvalue-%d", i)),
+			}
+		}
+		bus.Spec.Tags = newTags
+
+		err = r.Update(ctx, &bus)
+		assert.NilError(t, err, "update event bus: update kubernetes resource tags")
+
+		sdk := ebSDKClient(t)
+		tagsSynced := func() (bool, error) {
+			resp, err := sdk.DescribeEventBus(&eventbridge.DescribeEventBusInput{
+				Name: aws.String(name),
+			})
+			if err != nil {
+				return false, fmt.Errorf("describe event bus: %w", err)
+			}
+
+			listResp, err := sdk.ListTagsForResourceWithContext(ctx, &eventbridge.ListTagsForResourceInput{
+				ResourceARN: resp.Arn,
+			})
+			if err != nil {
+				return false, fmt.Errorf("list tags for event bus: %w", err)
+			}
+
+			serviceTags := make(map[string]string)
+			for _, tag := range listResp.Tags {
+				serviceTags[*tag.Key] = *tag.Value
+			}
+
+			matched := 0
+			for _, tag := range newTags {
+				v, ok := serviceTags[*tag.Key]
+				if !ok {
+					continue
+				}
+
+				if v == *tag.Value {
+					matched++
+				}
+			}
+
+			return matched == len(newTags), nil
+		}
+
+		err = wait.For(tagsSynced, wait.WithTimeout(time.Second*30))
+		assert.NilError(t, err, "update event bus: tag synchronization with backend")
+		return ctx
+	}
+}
+
+func createRule(name, bus string, tags []*ebv1alpha1.Tag) features.Func {
+	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		namespace := getTestNamespaceFromContext(ctx, t)
+
 		r, err := resources.New(c.Client().RESTConfig())
 		if err != nil {
 			t.Fail()
@@ -216,8 +336,10 @@ func createRule(name, namespace, bus string, tags []*ebv1alpha1.Tag) func(ctx co
 	}
 }
 
-func ruleSynced(name, namespace, busName string, tags []*ebv1alpha1.Tag) func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+func ruleSynced(name, busName string, tags []*ebv1alpha1.Tag) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		namespace := getTestNamespaceFromContext(ctx, t)
+
 		r, err := resources.New(c.Client().RESTConfig())
 		assert.NilError(t, err)
 
@@ -276,8 +398,81 @@ func ruleSynced(name, namespace, busName string, tags []*ebv1alpha1.Tag) func(ct
 	}
 }
 
-func eventReceived(busName string) func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+func updateRule(name, busName string) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		namespace := getTestNamespaceFromContext(ctx, t)
+
+		r, err := resources.New(c.Client().RESTConfig())
+		assert.NilError(t, err)
+
+		err = ebv1alpha1.AddToScheme(r.GetScheme())
+		assert.NilError(t, err)
+
+		var rule ebv1alpha1.Rule
+		r.WithNamespace(namespace)
+		err = r.Get(ctx, name, namespace, &rule)
+		assert.NilError(t, err)
+
+		// replace tags with three new tags
+		newTags := make([]*ebv1alpha1.Tag, 3)
+		for i := 0; i < 3; i++ {
+			newTags[i] = &ebv1alpha1.Tag{
+				Key:   aws.String(fmt.Sprintf("newtag-%d", i)),
+				Value: aws.String(fmt.Sprintf("newvalue-%d", i)),
+			}
+		}
+		rule.Spec.Tags = newTags
+
+		err = r.Update(ctx, &rule)
+		assert.NilError(t, err, "update rule: update kubernetes resource tags")
+
+		sdk := ebSDKClient(t)
+		tagsSynced := func() (bool, error) {
+			resp, err := sdk.DescribeRule(&eventbridge.DescribeRuleInput{
+				EventBusName: aws.String(busName),
+				Name:         aws.String(name),
+			})
+			if err != nil {
+				return false, fmt.Errorf("describe rule: %w", err)
+			}
+
+			listResp, err := sdk.ListTagsForResourceWithContext(ctx, &eventbridge.ListTagsForResourceInput{
+				ResourceARN: resp.Arn,
+			})
+			if err != nil {
+				return false, fmt.Errorf("list tags for rule: %w", err)
+			}
+
+			serviceTags := make(map[string]string)
+			for _, tag := range listResp.Tags {
+				serviceTags[*tag.Key] = *tag.Value
+			}
+
+			matched := 0
+			for _, tag := range newTags {
+				v, ok := serviceTags[*tag.Key]
+				if !ok {
+					continue
+				}
+
+				if v == *tag.Value {
+					matched++
+				}
+			}
+
+			return matched == len(newTags), nil
+		}
+
+		err = wait.For(tagsSynced, wait.WithTimeout(time.Second*30))
+		assert.NilError(t, err, "update rule: tag synchronization with backend")
+		return ctx
+	}
+}
+
+func eventReceived(busName string) features.Func {
+	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		namespace := getTestNamespaceFromContext(ctx, t)
+
 		now := time.Now().UTC()
 		payload := map[string]interface{}{
 			"message":       "test event from ack e2e suite for eventbridge",
@@ -292,7 +487,7 @@ func eventReceived(busName string) func(ctx context.Context, t *testing.T, c *en
 				Detail:       aws.String(string(payloadbytes)),
 				DetailType:   aws.String("ack-e2e-testevent"),
 				EventBusName: aws.String(busName),
-				Resources:    []*string{&testNamespace, &testBusName, &testRuleName},
+				Resources:    []*string{&namespace, &testBusName, &testRuleName},
 				Source:       aws.String("kubernetes.io/ack-e2e"),
 				Time:         aws.Time(time.Now().UTC()),
 			}},
@@ -371,15 +566,51 @@ func eventReceived(busName string) func(ctx context.Context, t *testing.T, c *en
 	}
 }
 
-// assert that all eventbridge control plane resources are deleted
-func deleteTestResources(ruleName, busName, namespace string) func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+func deleteBus(name string) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		namespace := getTestNamespaceFromContext(ctx, t)
+
+		r, err := resources.New(c.Client().RESTConfig())
+		assert.NilError(t, err)
+
+		var bus ebv1alpha1.EventBus
+		err = r.Get(ctx, name, namespace, &bus)
+		assert.NilError(t, err)
+
+		err = r.Delete(ctx, &bus)
+		assert.NilError(t, err)
+
+		sdk := ebSDKClient(t)
+
+		busDeleted := func() (bool, error) {
+			resp, err := sdk.ListEventBusesWithContext(ctx, &eventbridge.ListEventBusesInput{
+				NamePrefix: aws.String(name), // ignore "default" bus
+			})
+			if err != nil {
+				return false, fmt.Errorf("list event buses: %w", err)
+			}
+
+			return len(resp.EventBuses) == 0, nil
+		}
+
+		waitTimeout := time.Second * 30
+		err = wait.For(busDeleted, wait.WithTimeout(waitTimeout))
+		assert.NilError(t, err, "delete event bus: resources not cleaned up in service control plane")
+
+		return ctx
+	}
+}
+
+func deleteRule(name, busName string) features.Func {
+	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		namespace := getTestNamespaceFromContext(ctx, t)
+
 		r, err := resources.New(c.Client().RESTConfig())
 		assert.NilError(t, err)
 
 		// delete rule
 		var rule ebv1alpha1.Rule
-		err = r.Get(ctx, ruleName, namespace, &rule)
+		err = r.Get(ctx, name, namespace, &rule)
 		assert.NilError(t, err)
 
 		err = r.Delete(ctx, &rule)
@@ -401,28 +632,6 @@ func deleteTestResources(ruleName, busName, namespace string) func(ctx context.C
 		waitTimeout := time.Second * 30
 		err = wait.For(ruleDeleted, wait.WithTimeout(waitTimeout))
 		assert.NilError(t, err, "delete rule: resources not cleaned up in service control plane")
-
-		// delete bus
-		var bus ebv1alpha1.EventBus
-		err = r.Get(ctx, busName, namespace, &bus)
-		assert.NilError(t, err)
-
-		err = r.Delete(ctx, &bus)
-		assert.NilError(t, err)
-
-		busDeleted := func() (bool, error) {
-			resp, err := sdk.ListEventBusesWithContext(ctx, &eventbridge.ListEventBusesInput{
-				NamePrefix: aws.String(busName), // ignore "default" bus
-			})
-			if err != nil {
-				return false, fmt.Errorf("list event buses: %w", err)
-			}
-
-			return len(resp.EventBuses) == 0, nil
-		}
-
-		err = wait.For(busDeleted, wait.WithTimeout(waitTimeout))
-		assert.NilError(t, err, "delete event bus: resources not cleaned up in service control plane")
 
 		return ctx
 	}

@@ -57,9 +57,12 @@ func (rm *resourceManager) setResourceAdditionalFields(
 		if err != nil {
 			return err
 		}
-	}
 
-	// TODO Query targets
+		ko.Spec.Targets, err = rm.getTargets(ctx, *ko.Spec.Name, *ko.Spec.EventBusName)
+		if err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

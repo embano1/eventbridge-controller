@@ -2,18 +2,19 @@ package e2e
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"testing"
 
 	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/kelseyhightower/envconfig"
+	"gotest.tools/v3/assert"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/envfuncs"
+	"sigs.k8s.io/e2e-framework/pkg/features"
 
 	ebv1alpha1 "github.com/aws-controllers-k8s/eventbridge-controller/apis/v1alpha1"
 )
@@ -27,9 +28,12 @@ type envConfig struct {
 	CtrlImage    string `envconfig:"ACK_CONTROLLER_IMAGE" required:"true"`
 }
 
+type namespaceCtxKey string
+
 const (
 	baseCRDPath   = "../../config/crd/bases"
 	commonCRDPath = "../../config/crd/common/bases"
+	namespaceKey  = namespaceCtxKey("featureNamespace")
 )
 
 var (
@@ -41,8 +45,8 @@ var (
 	queueARN  string
 	queueURL  string
 
-	testNamespace string
-	tags          []*ebv1alpha1.Tag
+	// common tags
+	tags []*ebv1alpha1.Tag
 )
 
 func TestMain(m *testing.M) {
@@ -54,8 +58,6 @@ func TestMain(m *testing.M) {
 	}
 
 	testEnv = env.NewWithConfig(cfg)
-
-	testNamespace = envconf.RandomName("ack-e2e", 20)
 	queueName = envconf.RandomName("ack-e2e-queue", 20)
 
 	tags = []*ebv1alpha1.Tag{{
@@ -67,98 +69,53 @@ func TestMain(m *testing.M) {
 	testEnv.Setup(
 		createSQSTestQueue(queueName, tags),
 		envfuncs.CreateKindCluster(envCfg.KindCluster),
-		envfuncs.CreateNamespace(testNamespace), // namespace for ack-system created from config files
 		envfuncs.SetupCRDs(baseCRDPath, "*"),
 		envfuncs.SetupCRDs(commonCRDPath, "*"),
 	)
 
 	testEnv.Finish(
-		envfuncs.DeleteNamespace(testNamespace),
 		envfuncs.DeleteNamespace(ackNamespace),
 		destroySQSTestQueue(),
 	)
 
+	// create/delete namespace per feature
+	testEnv.BeforeEachFeature(func(ctx context.Context, cfg *envconf.Config, _ *testing.T, f features.Feature) (context.Context, error) {
+		return createNSForFeature(ctx, cfg, f.Name())
+	})
+	testEnv.AfterEachFeature(func(ctx context.Context, cfg *envconf.Config, t *testing.T, f features.Feature) (context.Context, error) {
+		return deleteNSForFeature(ctx, cfg, t, f.Name())
+	})
+
 	os.Exit(testEnv.Run(m))
 }
 
-func createSQSTestQueue(name string, tags []*ebv1alpha1.Tag) env.Func {
-	return func(ctx context.Context, _ *envconf.Config) (context.Context, error) {
-		sqssdk, err := sqsSDKClient()
-		if err != nil {
-			return ctx, fmt.Errorf("create sqs sdk client: %w", err)
-		}
+// createNSForFeature creates a random namespace with the runID as a prefix. It is stored in the context
+// so that the deleteNSForFeature routine can look it up and delete it.
+func createNSForFeature(ctx context.Context, cfg *envconf.Config, feature string) (context.Context, error) {
+	ns := envconf.RandomName("ack-feature", 15)
+	ctx = context.WithValue(ctx, namespaceKey, ns)
 
-		sqstags := make(map[string]*string)
-		for _, t := range tags {
-			cp := *t
-			sqstags[*cp.Key] = cp.Value
-		}
+	klog.V(1).Infof("creating namespace %q for feature %q", ns, feature)
+	nsObj := corev1.Namespace{}
+	nsObj.Name = ns
 
-		resp, err := sqssdk.CreateQueue(&sqs.CreateQueueInput{
-			QueueName: aws.String(name),
-			Tags:      sqstags,
-			Attributes: map[string]*string{
-				"Policy": aws.String(sqsPolicy),
-			},
-		})
-		if err != nil {
-			return ctx, fmt.Errorf("create sqs queue: %w", err)
-		}
-		queueURL = *resp.QueueUrl
-		klog.V(1).Infof("created test sqs queue %q", *resp.QueueUrl)
-
-		const arnKey = "QueueArn"
-		attrs, err := sqssdk.GetQueueAttributes(&sqs.GetQueueAttributesInput{
-			AttributeNames: []*string{aws.String(arnKey)},
-			QueueUrl:       resp.QueueUrl,
-		})
-		if err != nil {
-			return ctx, fmt.Errorf("get sqs queue attributes: %w", err)
-		}
-
-		if arn, ok := attrs.Attributes[arnKey]; !ok {
-			return ctx, fmt.Errorf("get sqs queue attributes: value for %q not found", arnKey)
-		} else {
-			queueARN = *arn
-		}
-
-		return ctx, nil
-	}
+	return ctx, cfg.Client().Resources().Create(ctx, &nsObj)
 }
 
-func destroySQSTestQueue() env.Func {
-	return func(ctx context.Context, cfg *envconf.Config) (context.Context, error) {
-		sqssdk, err := sqsSDKClient()
-		if err != nil {
-			return ctx, fmt.Errorf("create sqs sdk client: %w", err)
-		}
+// deleteNSForFeature looks up the namespace corresponding to the given test and deletes it.
+func deleteNSForFeature(ctx context.Context, cfg *envconf.Config, t *testing.T, feature string) (context.Context, error) {
+	ns := getTestNamespaceFromContext(ctx, t)
 
-		_, err = sqssdk.DeleteQueue(&sqs.DeleteQueueInput{
-			QueueUrl: aws.String(queueURL),
-		})
-		if err != nil {
-			return ctx, fmt.Errorf("destroy sqs queue: %w", err)
-		}
+	klog.V(1).Infof("deleting namespace %q for feature %q", ns, feature)
 
-		klog.V(1).Infof("destroyed test sqs queue %q", queueURL)
-		return ctx, nil
-	}
+	nsObj := corev1.Namespace{}
+	nsObj.Name = ns
+
+	return ctx, cfg.Client().Resources().Delete(ctx, &nsObj)
 }
 
-const sqsPolicy = `{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Service": "events.amazonaws.com"
-      },
-      "Resource": "arn:aws:sqs:*",
-      "Action": [
-        "sqs:GetQueueAttributes",
-        "sqs:GetQueueUrl",
-        "sqs:SendMessage"
-      ]
-    }
-  ]
-}`
+func getTestNamespaceFromContext(ctx context.Context, t *testing.T) string {
+	ns, ok := ctx.Value(namespaceKey).(string)
+	assert.Equal(t, ok, true, "retrieve namespace from context: value not found for key %q", namespaceKey)
+	return ns
+}

@@ -10,3 +10,7 @@ func sdkTargetsFromResourceTargets(
 	}
 	return res
 }
+
+func resourceTargetsFromSdkTargets(
+	targets []*svcsdk.Target,
+) []*svcapitypes.Target {return nil}

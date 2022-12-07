@@ -49,7 +49,7 @@ func (rm *resourceManager) syncRuleTags(
 	exit := rlog.Trace("rm.syncRuleTags")
 	defer func(err error) { exit(err) }(err)
 
-	added, removed := computeTagsDelta(latest.ko.Spec.Tags, desired.ko.Spec.Tags)
+	added, removed := computeTagsDelta(desired.ko.Spec.Tags, latest.ko.Spec.Tags)
 
 	if len(removed) > 0 {
 		_, err = rm.sdkapi.UntagResourceWithContext(
@@ -85,14 +85,14 @@ func (rm *resourceManager) syncRuleTags(
 // containing the added and removed tags.
 // The removed tags list only contains the Key of tags
 func computeTagsDelta(
-	a []*v1alpha1.Tag,
-	b []*v1alpha1.Tag,
+	desired []*v1alpha1.Tag,
+	latest []*v1alpha1.Tag,
 ) (added, removed []*v1alpha1.Tag) {
 	var visitedIndexes []string
 mainLoop:
-	for _, aElement := range a {
+	for _, aElement := range desired {
 		visitedIndexes = append(visitedIndexes, *aElement.Key)
-		for _, bElement := range b {
+		for _, bElement := range latest {
 			if equalStrings(aElement.Key, bElement.Key) {
 				if !equalStrings(aElement.Value, bElement.Value) {
 					added = append(added, bElement)
@@ -102,7 +102,7 @@ mainLoop:
 		}
 		removed = append(removed, aElement)
 	}
-	for _, bElement := range b {
+	for _, bElement := range latest {
 		if !util.InStrings(*bElement.Key, visitedIndexes) {
 			added = append(added, bElement)
 		}

@@ -5,8 +5,10 @@ import (
 	"errors"
 	"reflect"
 
+	"github.com/aws-controllers-k8s/runtime/pkg/runtime/log"
 	ackrtlog "github.com/aws-controllers-k8s/runtime/pkg/runtime/log"
 	ackutil "github.com/aws-controllers-k8s/runtime/pkg/util"
+	"github.com/aws/aws-sdk-go/aws"
 	svcsdk "github.com/aws/aws-sdk-go/service/eventbridge"
 
 	"github.com/aws-controllers-k8s/eventbridge-controller/apis/v1alpha1"
@@ -31,6 +33,28 @@ func validateTargets(targets []*svcapitypes.Target) error {
 	}
 
 	return nil
+}
+
+// getTags retrieves a resource list of tags.
+func (rm *resourceManager) getTargets(ctx context.Context, rule, bus string) (targets []*svcapitypes.Target, err error) {
+	rlog := log.FromContext(ctx)
+	exit := rlog.Trace("rm.getTargets")
+	defer func() { exit(err) }()
+
+	var listTargetsResponse *svcsdk.ListTargetsByRuleOutput
+	listTargetsResponse, err = rm.sdkapi.ListTargetsByRuleWithContext(
+		ctx,
+		&svcsdk.ListTargetsByRuleInput{
+			EventBusName: aws.String(bus),
+			Rule:         aws.String(rule),
+		},
+	)
+	rm.metrics.RecordAPICall("GET", "ListTargetsForResource", err)
+	if err != nil {
+		return nil, err
+	}
+
+	return resourceTargetsFromSdkTargets(listTargetsResponse.Targets), nil
 }
 
 // syncRuleTargets updates event bus tags
