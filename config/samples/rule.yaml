@@ -1,0 +1,11 @@
+apiVersion: eventbridge.services.k8s.aws/v1alpha1
+kind: Rule
+metadata:
+  name: rule-01
+spec:
+  eventBusName: default
+  name: rule-01
+  scheduleExpression: "rate(5 minutes)"
+  tags:
+    - key: tag-01
+      value: value-01

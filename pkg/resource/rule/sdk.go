@@ -557,7 +557,7 @@ func (rm *resourceManager) getImmutableFieldChanges(
 
 	return fields
 }
-func sdkTargetsFromResourceTargets(
+func SdkTargetsFromResourceTargets(
 	targets []*svcapitypes.Target,
 ) []*svcsdk.Target {
 	var res []*svcsdk.Target

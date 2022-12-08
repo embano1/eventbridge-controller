@@ -1,3 +1,5 @@
+//go:build e2e
+
 package e2e
 
 import (
@@ -14,8 +16,10 @@ import (
 	"github.com/aws/aws-sdk-go/service/eventbridge"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"gotest.tools/v3/assert"
+	"gotest.tools/v3/assert/cmp"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/klient/decoder"
 	"sigs.k8s.io/e2e-framework/klient/k8s"
@@ -26,6 +30,7 @@ import (
 	"sigs.k8s.io/e2e-framework/pkg/features"
 
 	ebv1alpha1 "github.com/aws-controllers-k8s/eventbridge-controller/apis/v1alpha1"
+	convert "github.com/aws-controllers-k8s/eventbridge-controller/pkg/resource/rule"
 )
 
 const (
@@ -71,13 +76,13 @@ func TestSuite(t *testing.T) {
 		Teardown(deleteBus(testBusName)).
 		Feature()
 
-	/*	invalidRule := features.New("EventBridge Rule invalid in terminal state").
+	invalidRule := features.New("EventBridge Rule invalid in terminal state").
 		Setup(setupBus(testBusName, tags)).
-		Assess("create invalid rule", createRule(testRuleName, testBusName, tags)).
-		Assess("rule is in terminal state", ruleSynced(testRuleName, testBusName, tags)).
+		Assess("create invalid rule", createInvalidRule(testRuleName, testBusName, tags)).
+		Assess("rule is in terminal state", ruleInTerminalState(testRuleName, testBusName, tags)).
 		Assess("delete rule", deleteRule(testRuleName, testBusName)).
 		Teardown(deleteBus(testBusName)).
-		Feature()*/
+		Feature()
 
 	e2e := features.New("EventBridge E2E").
 		Setup(setupBus(testBusName, tags)).
@@ -88,7 +93,7 @@ func TestSuite(t *testing.T) {
 		Teardown(deleteBus(testBusName)).
 		Feature()
 
-	testEnv.Test(t, ctrl, bus, rule, e2e)
+	testEnv.Test(t, ctrl, bus, rule, invalidRule, e2e)
 }
 
 func createController() features.Func {
@@ -336,6 +341,42 @@ func createRule(name, bus string, tags []*ebv1alpha1.Tag) features.Func {
 	}
 }
 
+func createInvalidRule(name, bus string, tags []*ebv1alpha1.Tag) features.Func {
+	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		namespace := getTestNamespaceFromContext(ctx, t)
+
+		r, err := resources.New(c.Client().RESTConfig())
+		if err != nil {
+			t.Fail()
+		}
+		err = ebv1alpha1.AddToScheme(r.GetScheme())
+		assert.NilError(t, err)
+
+		r.WithNamespace(namespace)
+
+		// rule without any pattern is invalid
+		rule := ebv1alpha1.Rule{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      name,
+				Namespace: namespace,
+			},
+			Spec: ebv1alpha1.RuleSpec{
+				EventBusRef: &ackv1alpha1.AWSResourceReferenceWrapper{
+					From: &ackv1alpha1.AWSResourceReference{
+						Name: aws.String(bus),
+					},
+				},
+				Name: aws.String(name),
+				Tags: tags,
+			},
+		}
+		err = r.Create(ctx, &rule)
+		assert.NilError(t, err) // create succeeds because we do not have validation webhooks yet
+
+		return ctx
+	}
+}
+
 func ruleSynced(name, busName string, tags []*ebv1alpha1.Tag) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		namespace := getTestNamespaceFromContext(ctx, t)
@@ -398,6 +439,46 @@ func ruleSynced(name, busName string, tags []*ebv1alpha1.Tag) features.Func {
 	}
 }
 
+func ruleInTerminalState(name, busName string, tags []*ebv1alpha1.Tag) features.Func {
+	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		namespace := getTestNamespaceFromContext(ctx, t)
+
+		r, err := resources.New(c.Client().RESTConfig())
+		assert.NilError(t, err)
+
+		err = ebv1alpha1.AddToScheme(r.GetScheme())
+		assert.NilError(t, err)
+
+		var rule ebv1alpha1.Rule
+		r.WithNamespace(namespace)
+		err = r.Get(ctx, name, namespace, &rule)
+		assert.NilError(t, err)
+
+		terminalCondition := conditions.New(r).ResourceMatch(&rule, func(rule k8s.Object) bool {
+			for _, cond := range rule.(*ebv1alpha1.Rule).Status.Conditions {
+				if cond.Type == ackv1alpha1.ConditionTypeTerminal && cond.Status == corev1.ConditionTrue {
+					return true
+				}
+			}
+			return false
+		})
+
+		err = wait.For(terminalCondition, wait.WithTimeout(time.Minute))
+		assert.NilError(t, err)
+
+		// no rule should be created in backend
+		sdk := ebSDKClient(t)
+		resp, err := sdk.ListRulesWithContext(ctx, &eventbridge.ListRulesInput{
+			EventBusName: aws.String(busName),
+			NamePrefix:   aws.String(name),
+		})
+		assert.NilError(t, err)
+		assert.Assert(t, len(resp.Rules) == 0, "list rules: length mismatch")
+
+		return ctx
+	}
+}
+
 func updateRule(name, busName string) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		namespace := getTestNamespaceFromContext(ctx, t)
@@ -423,10 +504,34 @@ func updateRule(name, busName string) features.Func {
 		}
 		rule.Spec.Tags = newTags
 
+		newTargets := []*ebv1alpha1.Target{{
+			ARN: aws.String("arn:aws:lambda:us-east-1:123456789012:function:MyFunction"),
+			ID:  aws.String("newtarget"),
+			InputTransformer: &ebv1alpha1.InputTransformer{
+				InputPathsMap: map[string]*string{
+					"instance": aws.String("$.detail.instance"),
+					"status":   aws.String("$.detail.status"),
+				},
+				InputTemplate: aws.String("<instance> is in state <status>"),
+			},
+			RetryPolicy: &ebv1alpha1.RetryPolicy{
+				MaximumRetryAttempts: aws.Int64(0),
+			},
+			RoleARN: aws.String("arn:aws:iam::123456789012:role/somerole"),
+			SQSParameters: &ebv1alpha1.SQSParameters{
+				MessageGroupID: aws.String("someid"),
+			},
+		}}
+
+		// replace semantics to test add/remove paths
+		rule.Spec.Targets = newTargets
+
 		err = r.Update(ctx, &rule)
-		assert.NilError(t, err, "update rule: update kubernetes resource tags")
+		assert.NilError(t, err, "update rule: update kubernetes resource targets and tags")
 
 		sdk := ebSDKClient(t)
+
+		// assert tag synchronization
 		tagsSynced := func() (bool, error) {
 			resp, err := sdk.DescribeRule(&eventbridge.DescribeRuleInput{
 				EventBusName: aws.String(busName),
@@ -465,6 +570,28 @@ func updateRule(name, busName string) features.Func {
 
 		err = wait.For(tagsSynced, wait.WithTimeout(time.Second*30))
 		assert.NilError(t, err, "update rule: tag synchronization with backend")
+
+		// assert target synchronization
+		targetsSynced := func() (bool, error) {
+			resp, err := sdk.ListTargetsByRuleWithContext(ctx, &eventbridge.ListTargetsByRuleInput{
+				EventBusName: aws.String(busName),
+				Rule:         aws.String(name),
+			})
+			if err != nil {
+				return false, fmt.Errorf("list targets for rule: %w", err)
+			}
+
+			wantTargets := convert.SdkTargetsFromResourceTargets(newTargets)
+			if ok := cmp.DeepEqual(resp.Targets, wantTargets)().Success(); !ok {
+				klog.V(1).Infof("targets differ: got=%+v want=%+v", resp.Targets, wantTargets)
+				return false, nil
+			}
+			return true, nil
+		}
+
+		err = wait.For(targetsSynced, wait.WithTimeout(time.Second*30))
+		assert.NilError(t, err, "update rule: target synchronization with backend")
+
 		return ctx
 	}
 }

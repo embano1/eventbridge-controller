@@ -19,9 +19,12 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .status.ackResourceMetadata.arn
+      name: ARN
+      type: string
     - jsonPath: .status.conditions[?(@.type=="ACK.ResourceSynced")].status
-      name: Synced
-      type: boolean
+      name: SYNCED
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
