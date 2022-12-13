@@ -13,4 +13,15 @@ func SdkTargetsFromResourceTargets(
 
 func resourceTargetsFromSdkTargets(
 	targets []*svcsdk.Target,
-) []*svcapitypes.Target {return nil}
+) ([]*svcapitypes.Target) {
+	var res []*svcapitypes.Target
+	for _, sdkTarget := range targets {
+		t := &svcapitypes.Target{}
+		// test
+		{{- $operation := (index .SDKAPI.API.Operations "PutTargets")}}
+		{{- $targetsSDKShape := (index $operation.InputRef.Shape.MemberRefs "Targets")}} 
+		{{ GoCodeSetResourceForStruct .CRD "" "t"  $field.ShapeRef.Shape.MemberRef "sdkTarget" $targetsSDKShape.Shape.MemberRef 1 }}
+		res = append(res, t)
+	}
+	return res
+}
