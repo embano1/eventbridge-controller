@@ -1,8 +1,8 @@
 # TODO Project
 # [] CRD custom printer columns - currently not possible
-# [] E2E
+# [X] E2E
 # [x] update event bus (allow tag modifications)
-# [] verify immutability - currently not possible
+# [X] verify immutability - currently not possible
 # [x] CRD shortnames
 # [] empty spec is allowed (so required name check is skipped)
 # [] ackerr.NotImplemented does not lead to terminal err condition
@@ -11,6 +11,10 @@
 # [] not in GA: discuss with users whether to allow "force" when deleting targets from a managed rule (and even to delete managed rule) (use CR annotation)
 # [] make default eventbus "" in putrule required instead of empty string for explicitness?
 # [] ask Rishi how JSON event patterns are handled in API (spaces, order, etc ignored when creating/updating a rule pattern?)
+# [] ask Amine about throttling/thunderhing herd and retries/jitter in runtime
+# [] bug Rishi on model updates when EB adds targets, etc.
+# [] review rule validation with Rishi/Nick Smith (schedules, len targets)
+# [] rishi: do we always need rolearn in target?
 
 ignore:
   resource_names:
@@ -121,3 +125,5 @@ resources:
       terminal_codes:
         - InvalidEventPatternException
         - ManagedRuleException # we don't support force because those rules are not managed by ACK
+        - ValidationError
+        - NotAuthorized # @Amine do we need that?

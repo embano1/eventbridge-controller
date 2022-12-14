@@ -13,6 +13,7 @@ import (
 	ackv1alpha1 "github.com/aws-controllers-k8s/runtime/apis/core/v1alpha1"
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/arn"
 	"github.com/aws/aws-sdk-go/service/eventbridge"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"gotest.tools/v3/assert"
@@ -439,46 +440,6 @@ func ruleSynced(name, busName string, tags []*ebv1alpha1.Tag) features.Func {
 	}
 }
 
-func ruleInTerminalState(name, busName string, tags []*ebv1alpha1.Tag) features.Func {
-	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
-		namespace := getTestNamespaceFromContext(ctx, t)
-
-		r, err := resources.New(c.Client().RESTConfig())
-		assert.NilError(t, err)
-
-		err = ebv1alpha1.AddToScheme(r.GetScheme())
-		assert.NilError(t, err)
-
-		var rule ebv1alpha1.Rule
-		r.WithNamespace(namespace)
-		err = r.Get(ctx, name, namespace, &rule)
-		assert.NilError(t, err)
-
-		terminalCondition := conditions.New(r).ResourceMatch(&rule, func(rule k8s.Object) bool {
-			for _, cond := range rule.(*ebv1alpha1.Rule).Status.Conditions {
-				if cond.Type == ackv1alpha1.ConditionTypeTerminal && cond.Status == corev1.ConditionTrue {
-					return true
-				}
-			}
-			return false
-		})
-
-		err = wait.For(terminalCondition, wait.WithTimeout(time.Minute))
-		assert.NilError(t, err)
-
-		// no rule should be created in backend
-		sdk := ebSDKClient(t)
-		resp, err := sdk.ListRulesWithContext(ctx, &eventbridge.ListRulesInput{
-			EventBusName: aws.String(busName),
-			NamePrefix:   aws.String(name),
-		})
-		assert.NilError(t, err)
-		assert.Assert(t, len(resp.Rules) == 0, "list rules: length mismatch")
-
-		return ctx
-	}
-}
-
 func updateRule(name, busName string) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		namespace := getTestNamespaceFromContext(ctx, t)
@@ -504,20 +465,24 @@ func updateRule(name, busName string) features.Func {
 		}
 		rule.Spec.Tags = newTags
 
+		// parse account id and region to create a valid target
+		arnInfo, err := arn.Parse(queueARN)
+		assert.NilError(t, err, "update rule: parse arn")
+
+		targetARN := fmt.Sprintf("arn:aws:lambda:%s:%s:function:MyFunction", arnInfo.Region, arnInfo.AccountID)
 		newTargets := []*ebv1alpha1.Target{{
-			ARN: aws.String("arn:aws:lambda:us-east-1:123456789012:function:MyFunction"),
+			ARN: aws.String(targetARN),
 			ID:  aws.String("newtarget"),
 			InputTransformer: &ebv1alpha1.InputTransformer{
 				InputPathsMap: map[string]*string{
 					"instance": aws.String("$.detail.instance"),
 					"status":   aws.String("$.detail.status"),
 				},
-				InputTemplate: aws.String("<instance> is in state <status>"),
+				InputTemplate: aws.String("\"<instance> is in state <status>\""), // quotes needed for valid input
 			},
 			RetryPolicy: &ebv1alpha1.RetryPolicy{
 				MaximumRetryAttempts: aws.Int64(0),
 			},
-			RoleARN: aws.String("arn:aws:iam::123456789012:role/somerole"),
 			SQSParameters: &ebv1alpha1.SQSParameters{
 				MessageGroupID: aws.String("someid"),
 			},
@@ -591,6 +556,46 @@ func updateRule(name, busName string) features.Func {
 
 		err = wait.For(targetsSynced, wait.WithTimeout(time.Second*30))
 		assert.NilError(t, err, "update rule: target synchronization with backend")
+
+		return ctx
+	}
+}
+
+func ruleInTerminalState(name, busName string, _ []*ebv1alpha1.Tag) features.Func {
+	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		namespace := getTestNamespaceFromContext(ctx, t)
+
+		r, err := resources.New(c.Client().RESTConfig())
+		assert.NilError(t, err)
+
+		err = ebv1alpha1.AddToScheme(r.GetScheme())
+		assert.NilError(t, err)
+
+		var rule ebv1alpha1.Rule
+		r.WithNamespace(namespace)
+		err = r.Get(ctx, name, namespace, &rule)
+		assert.NilError(t, err)
+
+		terminalCondition := conditions.New(r).ResourceMatch(&rule, func(rule k8s.Object) bool {
+			for _, cond := range rule.(*ebv1alpha1.Rule).Status.Conditions {
+				if cond.Type == ackv1alpha1.ConditionTypeTerminal && cond.Status == corev1.ConditionTrue {
+					return true
+				}
+			}
+			return false
+		})
+
+		err = wait.For(terminalCondition, wait.WithTimeout(time.Minute))
+		assert.NilError(t, err)
+
+		// no rule should be created in backend
+		sdk := ebSDKClient(t)
+		resp, err := sdk.ListRulesWithContext(ctx, &eventbridge.ListRulesInput{
+			EventBusName: aws.String(busName),
+			NamePrefix:   aws.String(name),
+		})
+		assert.NilError(t, err)
+		assert.Assert(t, len(resp.Rules) == 0, "list rules: length mismatch")
 
 		return ctx
 	}
