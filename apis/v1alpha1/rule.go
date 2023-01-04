@@ -24,6 +24,7 @@ import (
 //
 // Contains information about a rule in Amazon EventBridge.
 type RuleSpec struct {
+
 	// A description of the rule.
 	Description *string `json:"description,omitempty"`
 	// The name or ARN of the event bus to associate with this rule. If you omit
@@ -48,8 +49,7 @@ type RuleSpec struct {
 	// Indicates whether the rule is enabled or disabled.
 	State *string `json:"state,omitempty"`
 	// The list of key-value pairs to associate with the rule.
-	Tags []*Tag `json:"tags,omitempty"`
-
+	Tags    []*Tag    `json:"tags,omitempty"`
 	Targets []*Target `json:"targets,omitempty"`
 }
 

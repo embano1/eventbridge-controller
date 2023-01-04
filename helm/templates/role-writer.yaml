@@ -9,6 +9,10 @@ rules:
 - apiGroups:
   - eventbridge.services.k8s.aws
   resources:
+  - archives
+
+  - endpoints
+
   - eventbuses
 
   - rules
@@ -24,6 +28,8 @@ rules:
 - apiGroups:
   - eventbridge.services.k8s.aws
   resources:
+  - archives
+  - endpoints
   - eventbuses
   - rules
   verbs:

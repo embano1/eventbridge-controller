@@ -92,6 +92,21 @@ func ruleFor(name, namespace, bus, pattern string, targets []*eventbridge.Target
 	}
 }
 
+func archiveFor(name, namespace, busArn, pattern string) eventbridge.Archive {
+	return eventbridge.Archive{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: eventbridge.ArchiveSpec{
+			ArchiveName:    aws.String(name),
+			EventPattern:   aws.String(pattern),
+			EventSourceARN: aws.String(busArn),
+			RetentionDays:  aws.Int64(0), // forever,
+		},
+	}
+}
+
 func ebSDKClient(t *testing.T) *svcsdk.EventBridge {
 	s, err := session.NewSession(&aws.Config{
 		Region: aws.String(envCfg.Region),

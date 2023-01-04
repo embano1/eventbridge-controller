@@ -30,12 +30,16 @@ type envConfig struct {
 	CtrlImage    string `envconfig:"ACK_CONTROLLER_IMAGE" required:"true"`
 }
 
-type namespaceCtxKey string
+type (
+	namespaceCtxKey string
+	testbusCtxKey   string
+)
 
 const (
 	baseCRDPath   = "../../config/crd/bases"
 	commonCRDPath = "../../config/crd/common/bases"
 	namespaceKey  = namespaceCtxKey("featureNamespace")
+	busArnCtxKey  = testbusCtxKey("testBusArn")
 )
 
 var (
@@ -120,4 +124,10 @@ func getTestNamespaceFromContext(ctx context.Context, t *testing.T) string {
 	ns, ok := ctx.Value(namespaceKey).(string)
 	assert.Equal(t, ok, true, "retrieve namespace from context: value not found for key %q", namespaceKey)
 	return ns
+}
+
+func getTestBusArnFromContext(ctx context.Context, t *testing.T) string {
+	arn, ok := ctx.Value(busArnCtxKey).(string)
+	assert.Equal(t, ok, true, "retrieve test event bus arn from context: value not found for key %q", busArnCtxKey)
+	return arn
 }

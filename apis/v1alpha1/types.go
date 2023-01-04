@@ -28,6 +28,12 @@ var (
 	_ = ackv1alpha1.AWSAccountID("")
 )
 
+// Contains details about an API destination.
+type APIDestination struct {
+	CreationTime     *metav1.Time `json:"creationTime,omitempty"`
+	LastModifiedTime *metav1.Time `json:"lastModifiedTime,omitempty"`
+}
+
 // This structure specifies the VPC subnets and security groups for the task,
 // and whether a public IP address is to be used. This structure is relevant
 // only for ECS tasks that use the awsvpc network mode.
@@ -38,8 +44,15 @@ type AWSVPCConfiguration struct {
 }
 
 // An Archive object that contains details about an archive.
-type Archive struct {
-	EventSourceARN *string `json:"eventSourceARN,omitempty"`
+type Archive_SDK struct {
+	ArchiveName    *string      `json:"archiveName,omitempty"`
+	CreationTime   *metav1.Time `json:"creationTime,omitempty"`
+	EventCount     *int64       `json:"eventCount,omitempty"`
+	EventSourceARN *string      `json:"eventSourceARN,omitempty"`
+	RetentionDays  *int64       `json:"retentionDays,omitempty"`
+	SizeBytes      *int64       `json:"sizeBytes,omitempty"`
+	State          *string      `json:"state,omitempty"`
+	StateReason    *string      `json:"stateReason,omitempty"`
 }
 
 // The array properties for the submitted job, such as the size of the array.
@@ -95,6 +108,13 @@ type Condition struct {
 	Value *string `json:"value,omitempty"`
 }
 
+// Contains information about a connection.
+type Connection struct {
+	CreationTime       *metav1.Time `json:"creationTime,omitempty"`
+	LastAuthorizedTime *metav1.Time `json:"lastAuthorizedTime,omitempty"`
+	LastModifiedTime   *metav1.Time `json:"lastModifiedTime,omitempty"`
+}
+
 // Additional parameter included in the body. You can include up to 100 additional
 // body parameters per request. An event payload cannot exceed 64 KB.
 type ConnectionBodyParameter struct {
@@ -143,6 +163,34 @@ type EcsParameters struct {
 	TaskDefinitionARN    *string                `json:"taskDefinitionARN,omitempty"`
 }
 
+// The event buses the endpoint is associated with.
+type EndpointEventBus struct {
+	EventBusARN *string `json:"eventBusARN,omitempty"`
+}
+
+// An global endpoint used to improve your application's availability by making
+// it regional-fault tolerant. For more information about global endpoints,
+// see Making applications Regional-fault tolerant with global endpoints and
+// event replication (https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-global-endpoints.html)
+// in the Amazon EventBridge User Guide..
+type Endpoint_SDK struct {
+	ARN              *string             `json:"arn,omitempty"`
+	CreationTime     *metav1.Time        `json:"creationTime,omitempty"`
+	Description      *string             `json:"description,omitempty"`
+	EndpointID       *string             `json:"endpointID,omitempty"`
+	EndpointURL      *string             `json:"endpointURL,omitempty"`
+	EventBuses       []*EndpointEventBus `json:"eventBuses,omitempty"`
+	LastModifiedTime *metav1.Time        `json:"lastModifiedTime,omitempty"`
+	Name             *string             `json:"name,omitempty"`
+	// Endpoints can replicate all events to the secondary Region.
+	ReplicationConfig *ReplicationConfig `json:"replicationConfig,omitempty"`
+	RoleARN           *string            `json:"roleARN,omitempty"`
+	// The routing configuration of the endpoint.
+	RoutingConfig *RoutingConfig `json:"routingConfig,omitempty"`
+	State         *string        `json:"state,omitempty"`
+	StateReason   *string        `json:"stateReason,omitempty"`
+}
+
 // An event bus receives events from a source and routes them to rules associated
 // with that event bus. Your account's default event bus receives events from
 // Amazon Web Services services. A custom event bus can receive events from
@@ -159,9 +207,21 @@ type EventBus_SDK struct {
 // a partner event bus that matches this event source, that Amazon Web Services
 // account can receive events from the partner's applications or services.
 type EventSource struct {
-	ARN       *string `json:"arn,omitempty"`
-	CreatedBy *string `json:"createdBy,omitempty"`
-	Name      *string `json:"name,omitempty"`
+	ARN            *string      `json:"arn,omitempty"`
+	CreatedBy      *string      `json:"createdBy,omitempty"`
+	CreationTime   *metav1.Time `json:"creationTime,omitempty"`
+	ExpirationTime *metav1.Time `json:"expirationTime,omitempty"`
+	Name           *string      `json:"name,omitempty"`
+}
+
+// The failover configuration for an endpoint. This includes what triggers failover
+// and what happens when it's triggered.
+type FailoverConfig struct {
+	// The primary Region of the endpoint.
+	Primary *Primary `json:"primary,omitempty"`
+	// The secondary Region that processes events when failover is triggered or
+	// replication is enabled.
+	Secondary *Secondary `json:"secondary,omitempty"`
 }
 
 // These are custom parameter to be used when the target is an API Gateway REST
@@ -205,6 +265,13 @@ type PartnerEventSource struct {
 	Name *string `json:"name,omitempty"`
 }
 
+// The Amazon Web Services account that a partner event source has been offered
+// to.
+type PartnerEventSourceAccount struct {
+	CreationTime   *metav1.Time `json:"creationTime,omitempty"`
+	ExpirationTime *metav1.Time `json:"expirationTime,omitempty"`
+}
+
 // An object representing a constraint on task placement. To learn more, see
 // Task Placement Constraints (https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-placement-constraints.html)
 // in the Amazon Elastic Container Service Developer Guide.
@@ -219,6 +286,11 @@ type PlacementConstraint struct {
 type PlacementStrategy struct {
 	Field *string `json:"field,omitempty"`
 	Type  *string `json:"type_,omitempty"`
+}
+
+// The primary Region of the endpoint.
+type Primary struct {
+	HealthCheck *string `json:"healthCheck,omitempty"`
 }
 
 // Represents an event to be submitted.
@@ -259,7 +331,12 @@ type RemoveTargetsResultEntry struct {
 
 // A Replay object that contains details about a replay.
 type Replay struct {
-	EventSourceARN *string `json:"eventSourceARN,omitempty"`
+	EventEndTime          *metav1.Time `json:"eventEndTime,omitempty"`
+	EventLastReplayedTime *metav1.Time `json:"eventLastReplayedTime,omitempty"`
+	EventSourceARN        *string      `json:"eventSourceARN,omitempty"`
+	EventStartTime        *metav1.Time `json:"eventStartTime,omitempty"`
+	ReplayEndTime         *metav1.Time `json:"replayEndTime,omitempty"`
+	ReplayStartTime       *metav1.Time `json:"replayStartTime,omitempty"`
 }
 
 // A ReplayDestination object that contains details about a replay.
@@ -267,10 +344,22 @@ type ReplayDestination struct {
 	ARN *string `json:"arn,omitempty"`
 }
 
+// Endpoints can replicate all events to the secondary Region.
+type ReplicationConfig struct {
+	State *string `json:"state,omitempty"`
+}
+
 // A RetryPolicy object that includes information about the retry policy settings.
 type RetryPolicy struct {
 	MaximumEventAgeInSeconds *int64 `json:"maximumEventAgeInSeconds,omitempty"`
 	MaximumRetryAttempts     *int64 `json:"maximumRetryAttempts,omitempty"`
+}
+
+// The routing configuration of the endpoint.
+type RoutingConfig struct {
+	// The failover configuration for an endpoint. This includes what triggers failover
+	// and what happens when it's triggered.
+	FailoverConfig *FailoverConfig `json:"failoverConfig,omitempty"`
 }
 
 // Contains information about a rule in Amazon EventBridge.
@@ -317,6 +406,12 @@ type SageMakerPipelineParameter struct {
 // Pipeline that starts based on EventBridge events.
 type SageMakerPipelineParameters struct {
 	PipelineParameterList []*SageMakerPipelineParameter `json:"pipelineParameterList,omitempty"`
+}
+
+// The secondary Region that processes events when failover is triggered or
+// replication is enabled.
+type Secondary struct {
+	Route *string `json:"route,omitempty"`
 }
 
 // A key-value pair associated with an Amazon Web Services resource. In EventBridge,

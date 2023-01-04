@@ -20,35 +20,28 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EventBusSpec defines the desired state of EventBus.
+// ArchiveSpec defines the desired state of Archive.
 //
-// An event bus receives events from a source and routes them to rules associated
-// with that event bus. Your account's default event bus receives events from
-// Amazon Web Services services. A custom event bus can receive events from
-// your custom applications and services. A partner event bus receives events
-// from an event source created by an SaaS partner. These events come from the
-// partners services or applications.
-type EventBusSpec struct {
+// An Archive object that contains details about an archive.
+type ArchiveSpec struct {
 
-	// If you are creating a partner event bus, this specifies the partner event
-	// source that the new event bus will be matched with.
-	EventSourceName *string `json:"eventSourceName,omitempty"`
-	// The name of the new event bus.
-	//
-	// Event bus names cannot contain the / character. You can't use the name default
-	// for a custom event bus, as this name is already used for your account's default
-	// event bus.
-	//
-	// If this is a partner event bus, the name must exactly match the name of the
-	// partner event source that this event bus is matched to.
+	// The name for the archive to create.
 	// +kubebuilder:validation:Required
-	Name *string `json:"name"`
-	// Tags to associate with the event bus.
-	Tags []*Tag `json:"tags,omitempty"`
+	ArchiveName *string `json:"archiveName"`
+	// A description for the archive.
+	Description *string `json:"description,omitempty"`
+	// An event pattern to use to filter events sent to the archive.
+	EventPattern *string `json:"eventPattern,omitempty"`
+	// The ARN of the event bus that sends events to the archive.
+	// +kubebuilder:validation:Required
+	EventSourceARN *string `json:"eventSourceARN"`
+	// The number of days to retain events for. Default value is 0. If set to 0,
+	// events are retained indefinitely
+	RetentionDays *int64 `json:"retentionDays,omitempty"`
 }
 
-// EventBusStatus defines the observed state of EventBus
-type EventBusStatus struct {
+// ArchiveStatus defines the observed state of Archive
+type ArchiveStatus struct {
 	// All CRs managed by ACK have a common `Status.ACKResourceMetadata` member
 	// that is used to contain resource sync state, account ownership,
 	// constructed ARN for the resource
@@ -60,30 +53,39 @@ type EventBusStatus struct {
 	// resource
 	// +kubebuilder:validation:Optional
 	Conditions []*ackv1alpha1.Condition `json:"conditions"`
+	// The time at which the archive was created.
+	// +kubebuilder:validation:Optional
+	CreationTime *metav1.Time `json:"creationTime,omitempty"`
+	// The state of the archive that was created.
+	// +kubebuilder:validation:Optional
+	State *string `json:"state,omitempty"`
+	// The reason that the archive is in the state.
+	// +kubebuilder:validation:Optional
+	StateReason *string `json:"stateReason,omitempty"`
 }
 
-// EventBus is the Schema for the EventBuses API
+// Archive is the Schema for the Archives API
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="ARN",type=string,priority=0,JSONPath=`.status.ackResourceMetadata.arn`
+// +kubebuilder:printcolumn:name="STATE",type=string,priority=0,JSONPath=`.status.state`
 // +kubebuilder:printcolumn:name="SYNCED",type=string,priority=0,JSONPath=`.status.conditions[?(@.type=="ACK.ResourceSynced")].status`
 // +kubebuilder:printcolumn:name="Age",type="date",priority=0,JSONPath=".metadata.creationTimestamp"
-// +kubebuilder:resource:shortName=eb;bus
-type EventBus struct {
+type Archive struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec              EventBusSpec   `json:"spec,omitempty"`
-	Status            EventBusStatus `json:"status,omitempty"`
+	Spec              ArchiveSpec   `json:"spec,omitempty"`
+	Status            ArchiveStatus `json:"status,omitempty"`
 }
 
-// EventBusList contains a list of EventBus
+// ArchiveList contains a list of Archive
 // +kubebuilder:object:root=true
-type EventBusList struct {
+type ArchiveList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []EventBus `json:"items"`
+	Items           []Archive `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&EventBus{}, &EventBusList{})
+	SchemeBuilder.Register(&Archive{}, &ArchiveList{})
 }

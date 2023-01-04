@@ -5,6 +5,10 @@ metadata:
 spec:
   eventBusName: default
   name: rule-01
+  eventPattern: |
+    {
+      "detail-type":["myevent.v0"]
+    }
   scheduleExpression: "rate(5 minutes)"
   tags:
     - key: tag-01

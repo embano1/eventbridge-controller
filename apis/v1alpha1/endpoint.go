@@ -20,35 +20,36 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EventBusSpec defines the desired state of EventBus.
+// EndpointSpec defines the desired state of Endpoint.
 //
-// An event bus receives events from a source and routes them to rules associated
-// with that event bus. Your account's default event bus receives events from
-// Amazon Web Services services. A custom event bus can receive events from
-// your custom applications and services. A partner event bus receives events
-// from an event source created by an SaaS partner. These events come from the
-// partners services or applications.
-type EventBusSpec struct {
+// An global endpoint used to improve your application's availability by making
+// it regional-fault tolerant. For more information about global endpoints,
+// see Making applications Regional-fault tolerant with global endpoints and
+// event replication (https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-global-endpoints.html)
+// in the Amazon EventBridge User Guide..
+type EndpointSpec struct {
 
-	// If you are creating a partner event bus, this specifies the partner event
-	// source that the new event bus will be matched with.
-	EventSourceName *string `json:"eventSourceName,omitempty"`
-	// The name of the new event bus.
+	// A description of the global endpoint.
+	Description *string `json:"description,omitempty"`
+	// Define the event buses used.
 	//
-	// Event bus names cannot contain the / character. You can't use the name default
-	// for a custom event bus, as this name is already used for your account's default
-	// event bus.
-	//
-	// If this is a partner event bus, the name must exactly match the name of the
-	// partner event source that this event bus is matched to.
+	// The names of the event buses must be identical in each Region.
+	// +kubebuilder:validation:Required
+	EventBuses []*EndpointEventBus `json:"eventBuses"`
+	// The name of the global endpoint. For example, "Name":"us-east-2-custom_bus_A-endpoint".
 	// +kubebuilder:validation:Required
 	Name *string `json:"name"`
-	// Tags to associate with the event bus.
-	Tags []*Tag `json:"tags,omitempty"`
+	// Enable or disable event replication.
+	ReplicationConfig *ReplicationConfig `json:"replicationConfig,omitempty"`
+	// The ARN of the role used for replication.
+	RoleARN *string `json:"roleARN,omitempty"`
+	// Configure the routing policy, including the health check and secondary Region..
+	// +kubebuilder:validation:Required
+	RoutingConfig *RoutingConfig `json:"routingConfig"`
 }
 
-// EventBusStatus defines the observed state of EventBus
-type EventBusStatus struct {
+// EndpointStatus defines the observed state of Endpoint
+type EndpointStatus struct {
 	// All CRs managed by ACK have a common `Status.ACKResourceMetadata` member
 	// that is used to contain resource sync state, account ownership,
 	// constructed ARN for the resource
@@ -60,30 +61,33 @@ type EventBusStatus struct {
 	// resource
 	// +kubebuilder:validation:Optional
 	Conditions []*ackv1alpha1.Condition `json:"conditions"`
+	// The state of the endpoint that was created by this request.
+	// +kubebuilder:validation:Optional
+	State *string `json:"state,omitempty"`
 }
 
-// EventBus is the Schema for the EventBuses API
+// Endpoint is the Schema for the Endpoints API
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="ARN",type=string,priority=0,JSONPath=`.status.ackResourceMetadata.arn`
+// +kubebuilder:printcolumn:name="STATE",type=string,priority=0,JSONPath=`.status.state`
 // +kubebuilder:printcolumn:name="SYNCED",type=string,priority=0,JSONPath=`.status.conditions[?(@.type=="ACK.ResourceSynced")].status`
 // +kubebuilder:printcolumn:name="Age",type="date",priority=0,JSONPath=".metadata.creationTimestamp"
-// +kubebuilder:resource:shortName=eb;bus
-type EventBus struct {
+type Endpoint struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec              EventBusSpec   `json:"spec,omitempty"`
-	Status            EventBusStatus `json:"status,omitempty"`
+	Spec              EndpointSpec   `json:"spec,omitempty"`
+	Status            EndpointStatus `json:"status,omitempty"`
 }
 
-// EventBusList contains a list of EventBus
+// EndpointList contains a list of Endpoint
 // +kubebuilder:object:root=true
-type EventBusList struct {
+type EndpointList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []EventBus `json:"items"`
+	Items           []Endpoint `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&EventBus{}, &EventBusList{})
+	SchemeBuilder.Register(&Endpoint{}, &EndpointList{})
 }
