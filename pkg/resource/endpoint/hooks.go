@@ -3,6 +3,7 @@ package endpoint
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	ackcompare "github.com/aws-controllers-k8s/runtime/pkg/compare"
 	ackrequeue "github.com/aws-controllers-k8s/runtime/pkg/requeue"
@@ -21,15 +22,17 @@ const (
 	StatusCreateFailed = "CREATE_FAILED"
 	StatusUpdateFailed = "UPDATE_FAILED"
 	StatusDeleteFailed = "DELETE_FAILED"
+
+	defaultRequeueDelay = time.Second * 5
 )
 
 var requeueWaitWhileDeleting = ackrequeue.NeededAfter(
 	errors.New("endpoint in 'deleting' state, cannot be modified or deleted"),
-	ackrequeue.DefaultRequeueAfterDuration,
+	defaultRequeueDelay,
 )
 
 // TerminalStatuses are the status strings that are terminal states for an
-// Archive
+// Endpoint
 var TerminalStatuses = []string{
 	StatusCreateFailed,
 	StatusUpdateFailed,
@@ -110,18 +113,18 @@ func endpointAvailable(r *resource) bool {
 	return state == StatusActive
 }
 
-// endpointCreating returns true if the supplied Endpoint is in the process of
+// endpointInMutatingState returns true if the supplied Endpoint is in the process of
 // being created
-func endpointCreating(r *resource) bool {
+func endpointInMutatingState(r *resource) bool {
 	if r.ko.Status.State == nil {
 		return false
 	}
 	state := *r.ko.Status.State
-	return state == StatusCreating
+	return state == StatusCreating || state == StatusUpdating || state == StatusDeleting
 }
 
 // requeueWaitUntilCanModify returns a `ackrequeue.RequeueNeededAfter` struct
-// explaining the Archive cannot be modified until it reaches an available
+// explaining the Endpoint cannot be modified until it reaches an available
 // status.
 func requeueWaitUntilCanModify(r *resource) *ackrequeue.RequeueNeededAfter {
 	if r.ko.Status.State == nil {
@@ -129,12 +132,12 @@ func requeueWaitUntilCanModify(r *resource) *ackrequeue.RequeueNeededAfter {
 	}
 	status := *r.ko.Status.State
 	msg := fmt.Sprintf(
-		"Archive in '%s' state, cannot be modified.",
+		"Endpoint in '%s' state, cannot be modified.",
 		status,
 	)
 	return ackrequeue.NeededAfter(
 		errors.New(msg),
-		ackrequeue.DefaultRequeueAfterDuration,
+		defaultRequeueDelay,
 	)
 }
 
@@ -172,9 +175,6 @@ func customPreCompare(
 }
 
 func equalStrings(a, b *string) bool {
-	fmt.Printf("value a: %v", a)
-	fmt.Printf("value b: %v", b)
-
 	if a == nil {
 		return b == nil || *b == ""
 	}

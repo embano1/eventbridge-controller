@@ -160,8 +160,22 @@ func (rm *resourceManager) sdkFind(
 	} else {
 		ko.Status.State = nil
 	}
+	if resp.StateReason != nil {
+		ko.Status.StateReason = resp.StateReason
+	} else {
+		ko.Status.StateReason = nil
+	}
 
 	rm.setStatusDefaults(ko)
+
+	/*res := &resource{ko}
+	if endpointInTerminalState(res) {
+		msg := "Endpoint is in '" + *res.ko.Status.State + "' status"
+		ackcondition.SetTerminal(res, corev1.ConditionTrue, &msg, res.ko.Status.StateReason)
+		ackcondition.SetSynced(res, corev1.ConditionTrue, nil, nil)
+		return res, nil
+	}*/
+
 	return &resource{ko}, nil
 }
 
@@ -172,7 +186,6 @@ func (rm *resourceManager) requiredFieldsMissingFromReadOneInput(
 	r *resource,
 ) bool {
 	return r.ko.Spec.Name == nil
-
 }
 
 // newDescribeRequestPayload returns SDK-specific struct for the HTTP request
@@ -292,13 +305,13 @@ func (rm *resourceManager) sdkCreate(
 	}
 
 	rm.setStatusDefaults(ko)
+	res := &resource{ko}
 	if !endpointAvailable(&resource{ko}) {
-		ackcondition.SetSynced(&resource{ko}, corev1.ConditionFalse, nil, nil)
-	} else {
-		ackcondition.SetSynced(&resource{ko}, corev1.ConditionTrue, nil, nil)
+		// ackcondition.SetSynced(&resource{ko}, corev1.ConditionFalse, nil, nil)
+		return res, requeueWaitUntilCanModify(res)
 	}
 
-	return &resource{ko}, nil
+	return res, nil
 }
 
 // newCreateRequestPayload returns an SDK-specific struct for the HTTP request
@@ -386,23 +399,22 @@ func (rm *resourceManager) sdkUpdate(
 
 	if endpointInTerminalState(latest) {
 		msg := "Endpoint is in '" + *latest.ko.Status.State + "' status"
-		ackcondition.SetTerminal(desired, corev1.ConditionTrue, &msg, nil)
-		ackcondition.SetSynced(desired, corev1.ConditionTrue, nil, nil)
-		return desired, nil
+		desired.ko.Status = latest.ko.Status
+		return desired, ackerr.NewTerminalError(fmt.Errorf(msg))
 	}
 
-	if endpointCreating(latest) {
-		msg := "Endpoint is currently being created"
-		ackcondition.SetSynced(desired, corev1.ConditionFalse, &msg, nil)
+	if endpointInMutatingState(latest) {
+		// msg := "Endpoint is currently being modified"
+		// ackcondition.SetSynced(desired, corev1.ConditionFalse, &msg, nil)
 		return desired, requeueWaitUntilCanModify(latest)
 	}
 
-	if !endpointAvailable(latest) {
+	/*	if !endpointAvailable(latest) {
 		msg := "Endpoint is not available for modification in '" +
 			*latest.ko.Status.State + "' status"
 		ackcondition.SetSynced(desired, corev1.ConditionFalse, &msg, nil)
 		return desired, requeueWaitUntilCanModify(latest)
-	}
+	}*/
 
 	input, err := rm.newUpdateRequestPayload(ctx, desired)
 	if err != nil {
@@ -493,6 +505,12 @@ func (rm *resourceManager) sdkUpdate(
 	}
 
 	rm.setStatusDefaults(ko)
+	if !endpointAvailable(&resource{ko}) {
+		ackcondition.SetSynced(&resource{ko}, corev1.ConditionFalse, nil, nil)
+	} else {
+		ackcondition.SetSynced(&resource{ko}, corev1.ConditionTrue, nil, nil)
+	}
+
 	return &resource{ko}, nil
 }
 
@@ -643,7 +661,7 @@ func (rm *resourceManager) updateConditions(
 			}
 			ko.Status.Conditions = append(ko.Status.Conditions, terminalCondition)
 		}
-		var errorMessage = ""
+		errorMessage := ""
 		if err == ackerr.SecretTypeNotSupported || err == ackerr.SecretNotFound || errors.As(err, &termError) {
 			errorMessage = err.Error()
 		} else {

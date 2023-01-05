@@ -144,7 +144,6 @@ func (rm *resourceManager) requiredFieldsMissingFromReadOneInput(
 	r *resource,
 ) bool {
 	return r.ko.Spec.Name == nil
-
 }
 
 // newDescribeRequestPayload returns SDK-specific struct for the HTTP request
@@ -479,7 +478,7 @@ func (rm *resourceManager) updateConditions(
 			}
 			ko.Status.Conditions = append(ko.Status.Conditions, terminalCondition)
 		}
-		var errorMessage = ""
+		errorMessage := ""
 		if err == ackerr.SecretTypeNotSupported || err == ackerr.SecretNotFound || errors.As(err, &termError) {
 			errorMessage = err.Error()
 		} else {
@@ -559,6 +558,7 @@ func (rm *resourceManager) getImmutableFieldChanges(
 
 	return fields
 }
+
 func SdkTargetsFromResourceTargets(
 	targets []*svcapitypes.Target,
 ) []*svcsdk.Target {
@@ -875,11 +875,5 @@ func resourceTargetsFromSdkTargets(
 	targets []*svcsdk.Target,
 ) []*svcapitypes.Target {
 	var res []*svcapitypes.Target
-	for _, sdkTarget := range targets {
-		t := &svcapitypes.Target{}
-		// test
-
-		res = append(res, t)
-	}
 	return res
 }

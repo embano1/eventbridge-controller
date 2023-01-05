@@ -83,11 +83,18 @@ resources:
       RoleARN:
         compare:
           is_ignored: true
+      StateReason:
+        is_read_only: true
+        from:
+          operation: DescribeEndpoint
+          path: StateReason
     tags:
       ignore: true
     hooks:
       delta_pre_compare:
         code: customPreCompare(delta, a, b)
+      sdk_read_one_post_set_output:
+        template_path: hooks/endpoint/sdk_read_one_post_set_output.go.tpl
       sdk_create_pre_build_request:
         template_path: hooks/endpoint/sdk_create_pre_build_request.go.tpl
       sdk_create_post_set_output:

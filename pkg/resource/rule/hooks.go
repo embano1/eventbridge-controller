@@ -71,6 +71,11 @@ func equalStrings(a, b *string) bool {
 	if a == nil {
 		return b == nil || *b == ""
 	}
+
+	if a != nil && b == nil {
+		return false
+	}
+
 	return (*a == "" && b == nil) || *a == *b
 }
 

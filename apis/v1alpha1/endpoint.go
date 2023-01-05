@@ -64,6 +64,10 @@ type EndpointStatus struct {
 	// The state of the endpoint that was created by this request.
 	// +kubebuilder:validation:Optional
 	State *string `json:"state,omitempty"`
+	// The reason the endpoint you asked for information about is in its current
+	// state.
+	// +kubebuilder:validation:Optional
+	StateReason *string `json:"stateReason,omitempty"`
 }
 
 // Endpoint is the Schema for the Endpoints API
