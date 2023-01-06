@@ -208,3 +208,40 @@ func destroySQSTestQueue() env.Func {
 		return ctx, nil
 	}
 }
+
+// createNSForFeature creates a random namespace with the runID as a prefix. It is stored in the context
+// so that the deleteNSForFeature routine can look it up and delete it.
+func createNSForFeature(ctx context.Context, cfg *envconf.Config, feature string) (context.Context, error) {
+	ns := envconf.RandomName("ack-feature", 15)
+	ctx = context.WithValue(ctx, namespaceKey, ns)
+
+	klog.V(1).Infof("creating namespace %q for feature %q", ns, feature)
+	nsObj := corev1.Namespace{}
+	nsObj.Name = ns
+
+	return ctx, cfg.Client().Resources().Create(ctx, &nsObj)
+}
+
+// deleteNSForFeature looks up the namespace corresponding to the given test and deletes it.
+func deleteNSForFeature(ctx context.Context, cfg *envconf.Config, t *testing.T, feature string) (context.Context, error) {
+	ns := getTestNamespaceFromContext(ctx, t)
+
+	klog.V(1).Infof("deleting namespace %q for feature %q", ns, feature)
+
+	nsObj := corev1.Namespace{}
+	nsObj.Name = ns
+
+	return ctx, cfg.Client().Resources().Delete(ctx, &nsObj)
+}
+
+func getTestNamespaceFromContext(ctx context.Context, t *testing.T) string {
+	ns, ok := ctx.Value(namespaceKey).(string)
+	assert.Equal(t, ok, true, "retrieve namespace from context: value not found for key %q", namespaceKey)
+	return ns
+}
+
+func getTestBusArnFromContext(ctx context.Context, t *testing.T) string {
+	arn, ok := ctx.Value(busArnCtxKey).(string)
+	assert.Equal(t, ok, true, "retrieve test event bus arn from context: value not found for key %q", busArnCtxKey)
+	return arn
+}

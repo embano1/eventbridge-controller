@@ -10,8 +10,6 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/kelseyhightower/envconfig"
-	"gotest.tools/v3/assert"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/pkg/env"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
@@ -22,12 +20,15 @@ import (
 )
 
 type envConfig struct {
+	// aws credentials
 	Region       string `envconfig:"AWS_DEFAULT_REGION" required:"true"`
 	AccessKey    string `envconfig:"AWS_ACCESS_KEY_ID" required:"true"`
 	SecretKey    string `envconfig:"AWS_SECRET_ACCESS_KEY" required:"true"`
 	SessionToken string `envconfig:"AWS_SESSION_TOKEN" required:"true"`
-	KindCluster  string `envconfig:"KIND_CLUSTER_NAME" default:"ack"`
-	CtrlImage    string `envconfig:"ACK_CONTROLLER_IMAGE" required:"true"`
+
+	// kind configuration
+	KindCluster string `envconfig:"KIND_CLUSTER_NAME" default:"ack"`
+	CtrlImage   string `envconfig:"ACK_CONTROLLER_IMAGE" required:"true"`
 }
 
 type (
@@ -38,8 +39,9 @@ type (
 const (
 	baseCRDPath   = "../../config/crd/bases"
 	commonCRDPath = "../../config/crd/common/bases"
-	namespaceKey  = namespaceCtxKey("featureNamespace")
-	busArnCtxKey  = testbusCtxKey("testBusArn")
+
+	namespaceKey = namespaceCtxKey("featureNamespace")
+	busArnCtxKey = testbusCtxKey("testBusArn")
 )
 
 var (
@@ -82,6 +84,8 @@ func TestMain(m *testing.M) {
 	testEnv.Finish(
 		envfuncs.DeleteNamespace(ackNamespace),
 		destroySQSTestQueue(),
+		envfuncs.TeardownCRDs(baseCRDPath, "*"),
+		envfuncs.TeardownCRDs(commonCRDPath, "*"),
 	)
 
 	// create/delete namespace per feature
@@ -93,41 +97,4 @@ func TestMain(m *testing.M) {
 	})
 
 	os.Exit(testEnv.Run(m))
-}
-
-// createNSForFeature creates a random namespace with the runID as a prefix. It is stored in the context
-// so that the deleteNSForFeature routine can look it up and delete it.
-func createNSForFeature(ctx context.Context, cfg *envconf.Config, feature string) (context.Context, error) {
-	ns := envconf.RandomName("ack-feature", 15)
-	ctx = context.WithValue(ctx, namespaceKey, ns)
-
-	klog.V(1).Infof("creating namespace %q for feature %q", ns, feature)
-	nsObj := corev1.Namespace{}
-	nsObj.Name = ns
-
-	return ctx, cfg.Client().Resources().Create(ctx, &nsObj)
-}
-
-// deleteNSForFeature looks up the namespace corresponding to the given test and deletes it.
-func deleteNSForFeature(ctx context.Context, cfg *envconf.Config, t *testing.T, feature string) (context.Context, error) {
-	ns := getTestNamespaceFromContext(ctx, t)
-
-	klog.V(1).Infof("deleting namespace %q for feature %q", ns, feature)
-
-	nsObj := corev1.Namespace{}
-	nsObj.Name = ns
-
-	return ctx, cfg.Client().Resources().Delete(ctx, &nsObj)
-}
-
-func getTestNamespaceFromContext(ctx context.Context, t *testing.T) string {
-	ns, ok := ctx.Value(namespaceKey).(string)
-	assert.Equal(t, ok, true, "retrieve namespace from context: value not found for key %q", namespaceKey)
-	return ns
-}
-
-func getTestBusArnFromContext(ctx context.Context, t *testing.T) string {
-	arn, ok := ctx.Value(busArnCtxKey).(string)
-	assert.Equal(t, ok, true, "retrieve test event bus arn from context: value not found for key %q", busArnCtxKey)
-	return arn
 }
