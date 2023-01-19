@@ -1,5 +1,4 @@
-    if !endpointAvailable(&resource{ko}) {
-		ackcondition.SetSynced(&resource{ko}, corev1.ConditionFalse, nil, nil)
-	} else {
-		ackcondition.SetSynced(&resource{ko}, corev1.ConditionTrue, nil, nil)
+	if !endpointAvailable(&resource{ko}) {
+		// requeue: endpoint usually not immediately available i.e., CREATING or CREATE_FAILED
+		return res, requeueWaitWhileCreating
 	}

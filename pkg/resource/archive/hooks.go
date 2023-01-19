@@ -19,11 +19,6 @@ const (
 	StatusUpdateFailed = "UPDATE_FAILED"
 )
 
-var requeueWaitWhileDeleting = ackrequeue.NeededAfter(
-	errors.New("archive in 'deleting' state, cannot be modified or deleted"),
-	ackrequeue.DefaultRequeueAfterDuration,
-)
-
 // TerminalStatuses are the status strings that are terminal states for an
 // Archive
 var TerminalStatuses = []string{

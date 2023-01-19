@@ -16,6 +16,7 @@
 package endpoint
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -306,9 +307,10 @@ func (rm *resourceManager) sdkCreate(
 
 	rm.setStatusDefaults(ko)
 	res := &resource{ko}
+
 	if !endpointAvailable(&resource{ko}) {
-		// ackcondition.SetSynced(&resource{ko}, corev1.ConditionFalse, nil, nil)
-		return res, requeueWaitUntilCanModify(res)
+		// requeue: endpoint usually not immediately available i.e., CREATING or CREATE_FAILED
+		return res, requeueWaitWhileCreating
 	}
 
 	return res, nil
@@ -397,24 +399,24 @@ func (rm *resourceManager) sdkUpdate(
 		return nil, ackerr.NewTerminalError(err)
 	}
 
-	if endpointInTerminalState(latest) {
-		msg := "Endpoint is in '" + *latest.ko.Status.State + "' status"
-		desired.ko.Status = latest.ko.Status
-		return desired, ackerr.NewTerminalError(fmt.Errorf(msg))
+	var buf bytes.Buffer
+	for idx, d := range delta.Differences {
+		diff := fmt.Sprintf("diff index %d: %s", idx, d.Path)
+		buf.WriteString(diff)
+	}
+	fmt.Printf("deltas: %s\n", buf.String())
+
+	if endpointInTerminalState(latest) && !delta.DifferentAt("Spec") {
+		msg := fmt.Errorf("Endpoint is in terminal state %q and desired resource spec was not changed, not requeuing", *latest.ko.Status.State)
+		return desired, ackerr.NewTerminalError(msg)
 	}
 
 	if endpointInMutatingState(latest) {
-		// msg := "Endpoint is currently being modified"
-		// ackcondition.SetSynced(desired, corev1.ConditionFalse, &msg, nil)
-		return desired, requeueWaitUntilCanModify(latest)
-	}
-
-	/*	if !endpointAvailable(latest) {
 		msg := "Endpoint is not available for modification in '" +
 			*latest.ko.Status.State + "' status"
 		ackcondition.SetSynced(desired, corev1.ConditionFalse, &msg, nil)
 		return desired, requeueWaitUntilCanModify(latest)
-	}*/
+	}
 
 	input, err := rm.newUpdateRequestPayload(ctx, desired)
 	if err != nil {
@@ -505,12 +507,6 @@ func (rm *resourceManager) sdkUpdate(
 	}
 
 	rm.setStatusDefaults(ko)
-	if !endpointAvailable(&resource{ko}) {
-		ackcondition.SetSynced(&resource{ko}, corev1.ConditionFalse, nil, nil)
-	} else {
-		ackcondition.SetSynced(&resource{ko}, corev1.ConditionTrue, nil, nil)
-	}
-
 	return &resource{ko}, nil
 }
 
@@ -585,6 +581,11 @@ func (rm *resourceManager) sdkDelete(
 	defer func() {
 		exit(err)
 	}()
+
+	if endpointInMutatingState(r) {
+		return r, requeueWaitUntilCanModify(r)
+	}
+
 	input, err := rm.newDeleteRequestPayload(r)
 	if err != nil {
 		return nil, err
@@ -593,6 +594,12 @@ func (rm *resourceManager) sdkDelete(
 	_ = resp
 	resp, err = rm.sdkapi.DeleteEndpointWithContext(ctx, input)
 	rm.metrics.RecordAPICall("DELETE", "DeleteEndpoint", err)
+
+	// always requeue if API call succeeded due to eventually consistent state
+	// transitions
+	if err == nil {
+		return r, requeueWaitWhileDeleting
+	}
 	return nil, err
 }
 

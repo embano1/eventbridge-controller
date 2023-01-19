@@ -26,9 +26,16 @@ const (
 	defaultRequeueDelay = time.Second * 5
 )
 
-var requeueWaitWhileDeleting = ackrequeue.NeededAfter(
-	errors.New("endpoint in 'deleting' state, cannot be modified or deleted"),
-	defaultRequeueDelay,
+var (
+	requeueWaitWhileDeleting = ackrequeue.NeededAfter(
+		fmt.Errorf("endpoint in %q state, cannot be modified or deleted", StatusDeleting),
+		defaultRequeueDelay,
+	)
+
+	requeueWaitWhileCreating = ackrequeue.NeededAfter(
+		fmt.Errorf("endpoint in %q state, requeing", StatusCreating),
+		defaultRequeueDelay,
+	)
 )
 
 // TerminalStatuses are the status strings that are terminal states for an
