@@ -1,0 +1,22 @@
+apiVersion: eventbridge.services.k8s.aws/v1alpha1
+kind: Rule
+metadata:
+  name: filter-rule-01-eu-central-1
+  annotations:
+    services.k8s.aws/region: eu-central-1
+spec:
+  name: filter-rule-01
+  description: "ACK EventBridge Filter Rule"
+  eventBusRef:
+    from:
+      name: bus-01-eu-central-1
+  eventPattern: |
+    {
+      "detail-type":["event.for.ack.v0"]
+    }
+  targets:
+    - arn: arn:aws:logs:eu-central-1:331505801289:log-group:/aws/events/ack
+      id: rule-01-eu-central-1-cw-target
+  tags:
+    - key: tag-01
+      value: value-01

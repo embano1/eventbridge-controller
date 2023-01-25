@@ -1,0 +1,8 @@
+[
+    {
+        "Source": "my.aws.events.cli",
+        "DetailType": "event.for.ack.v0",
+        "Detail": "{\"hello-world\":\"from ACK for EventBridge\"}",
+        "EventBusName": "bus-01"
+    }
+]

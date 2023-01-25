@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"gotest.tools/v3/assert"
-	v12 "k8s.io/api/apps/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	"k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/e2e-framework/klient/decoder"
@@ -18,6 +18,16 @@ import (
 	"sigs.k8s.io/e2e-framework/klient/wait/conditions"
 	"sigs.k8s.io/e2e-framework/pkg/envconf"
 	"sigs.k8s.io/e2e-framework/pkg/features"
+)
+
+const (
+	// naive approach excludes all yaml files starting with "k"
+	// TODO(embano1): hack to exclude kustomization files
+	filterPattern      = "[^k]*.yaml"
+	controllerFilePath = "../../config/controller"
+	rbacFilePath       = "../../config/rbac"
+	controllerName     = "ack-eventbridge-controller"
+	ackNamespace       = "ack-system"
 )
 
 func createController() features.Func {
@@ -67,11 +77,11 @@ func controllerRunning() features.Func {
 		client, err := c.NewClient()
 		assert.NilError(t, err)
 
-		var d v12.Deployment
+		var d appsv1.Deployment
 		err = client.Resources().Get(ctx, controllerName, ackNamespace, &d)
 		assert.NilError(t, err)
 
-		readyCondition := conditions.New(client.Resources()).DeploymentConditionMatch(&d, v12.DeploymentAvailable, v1.ConditionTrue)
+		readyCondition := conditions.New(client.Resources()).DeploymentConditionMatch(&d, appsv1.DeploymentAvailable, v1.ConditionTrue)
 		err = wait.For(readyCondition, wait.WithTimeout(time.Minute))
 		assert.NilError(t, err)
 

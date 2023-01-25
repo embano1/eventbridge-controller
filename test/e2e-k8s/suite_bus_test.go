@@ -39,6 +39,81 @@ func setupBus(name string, tags []*v1alpha1.Tag) features.Func {
 	}
 }
 
+// creates two identical event buses, with "-primary" and "-secondary" suffix
+// respectively, in different regions to be used with global endpoints
+func setupBuses(name string, primaryRegion string, secondaryRegion string, tags []*v1alpha1.Tag) features.Func {
+	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		namespace := getTestNamespaceFromContext(ctx, t)
+
+		r, err := resources.New(c.Client().RESTConfig())
+		if err != nil {
+			t.Fail()
+		}
+		err = v1alpha1.AddToScheme(r.GetScheme())
+		assert.NilError(t, err)
+
+		r.WithNamespace(namespace)
+
+		// create primary bus
+		primary := eventBusFor(name, namespace, tags...)
+		primary.Name = primary.Name + "-primary" // K8s object name must differ in same namespace, spec name is same
+		annotations := primary.ObjectMeta.Annotations
+		if annotations == nil {
+			annotations = map[string]string{
+				"services.k8s.aws/region": primaryRegion,
+			}
+		} else {
+			annotations["services.k8s.aws/region"] = primaryRegion
+		}
+		primary.Annotations = annotations
+
+		err = r.Create(ctx, &primary)
+		assert.NilError(t, err)
+
+		syncedCondition := conditions.New(r).ResourceMatch(&primary, func(bus k8s.Object) bool {
+			for _, cond := range bus.(*v1alpha1.EventBus).Status.Conditions {
+				if cond.Type == ackcore.ConditionTypeResourceSynced && cond.Status == v1.ConditionTrue {
+					return true
+				}
+			}
+			return false
+		})
+
+		err = wait.For(syncedCondition, wait.WithTimeout(time.Minute))
+		assert.NilError(t, err)
+
+		// create secondy bus
+		secondary := eventBusFor(name, namespace, tags...)
+		secondary.Name = secondary.Name + "-secondary"
+		annotations = secondary.ObjectMeta.Annotations
+		if annotations == nil {
+			annotations = map[string]string{
+				"services.k8s.aws/region": secondaryRegion,
+			}
+		} else {
+			annotations["services.k8s.aws/region"] = secondaryRegion
+		}
+		secondary.Annotations = annotations
+
+		err = r.Create(ctx, &secondary)
+		assert.NilError(t, err)
+
+		syncedCondition = conditions.New(r).ResourceMatch(&secondary, func(bus k8s.Object) bool {
+			for _, cond := range bus.(*v1alpha1.EventBus).Status.Conditions {
+				if cond.Type == ackcore.ConditionTypeResourceSynced && cond.Status == v1.ConditionTrue {
+					return true
+				}
+			}
+			return false
+		})
+
+		err = wait.For(syncedCondition, wait.WithTimeout(time.Minute))
+		assert.NilError(t, err)
+
+		return ctx
+	}
+}
+
 func createEventBus(name string, tags []*v1alpha1.Tag) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		namespace := getTestNamespaceFromContext(ctx, t)
@@ -217,6 +292,21 @@ func deleteBus(name string) features.Func {
 		waitTimeout := time.Second * 30
 		err = wait.For(busDeleted, wait.WithTimeout(waitTimeout))
 		assert.NilError(t, err, "delete event bus: resources not cleaned up in service control plane")
+
+		return ctx
+	}
+}
+
+func deleteBuses(names []string) features.Func {
+	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
+		var steps []features.Func
+		for _, bus := range names {
+			steps = append(steps, deleteBus(bus))
+		}
+
+		for _, step := range steps {
+			ctx = step(ctx, t, c)
+		}
 
 		return ctx
 	}

@@ -1,0 +1,23 @@
+apiVersion: eventbridge.services.k8s.aws/v1alpha1
+kind: EventBus
+metadata:
+  name: bus-01-eu-west-1
+  annotations:
+    services.k8s.aws/region: eu-west-1
+spec:
+  name: bus-01
+  tags:
+    - key: tag-01
+      value: value-01
+---
+apiVersion: eventbridge.services.k8s.aws/v1alpha1
+kind: EventBus
+metadata:
+  name: bus-01-eu-central-1
+  annotations:
+    services.k8s.aws/region: eu-central-1
+spec:
+  name: bus-01
+  tags:
+    - key: tag-01
+      value: value-01

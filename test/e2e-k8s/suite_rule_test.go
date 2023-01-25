@@ -31,6 +31,10 @@ import (
 	ruleres "github.com/aws-controllers-k8s/eventbridge-controller/pkg/resource/rule"
 )
 
+const (
+	testEventPattern = `{"detail-type": ["ack-e2e-testevent"]}`
+)
+
 func createRule(name, bus string, tags []*v1alpha1.Tag) features.Func {
 	return func(ctx context.Context, t *testing.T, c *envconf.Config) context.Context {
 		namespace := getTestNamespaceFromContext(ctx, t)

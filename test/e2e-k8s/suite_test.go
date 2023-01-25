@@ -9,37 +9,21 @@ import (
 	"sigs.k8s.io/e2e-framework/pkg/features"
 )
 
-const (
-	// naive approach excludes all yaml files starting with "k"
-	// TODO(embano1): hack to exclude kustomization files
-	filterPattern = "[^k]*.yaml"
-
-	controllerFilePath = "../../config/controller"
-	rbacFilePath       = "../../config/rbac"
-	controllerName     = "ack-eventbridge-controller"
-	ackNamespace       = "ack-system"
-
-	testEventPattern = `{"detail-type": ["ack-e2e-testevent"]}`
-)
-
 var (
-	testBusName     string
-	testRuleName    string
-	testArchiveName string
+	testBusName      = envconf.RandomName("ack-bus-e2e", 20)
+	testRuleName     = envconf.RandomName("ack-rule-e2e", 20)
+	testArchiveName  = envconf.RandomName("ack-archive-e2e", 20)
+	testEndpointName = envconf.RandomName("ack-endpoint-e2e", 20)
 )
 
 func TestSuite(t *testing.T) {
-	testBusName = envconf.RandomName("ack-bus-e2e", 20)
-	testRuleName = envconf.RandomName("ack-rule-e2e", 20)
-	testArchiveName = envconf.RandomName("ack-archive-e2e", 20)
-
 	// required for other features
 	ctrl := features.New("EventBridge Controller").
 		Setup(createController()).
 		Assess("controller running without leader election", controllerRunning()).
 		Feature()
 
-	/*bus := features.New("EventBridge Event Bus CRUD").
+	bus := features.New("EventBridge Event Bus CRUD").
 		Assess("create event bus", createEventBus(testBusName, tags)).
 		Assess("event bus has synced", eventBusSynced(testBusName, tags)).
 		Assess("update event bus", updateEventBus(testBusName)).
@@ -61,7 +45,7 @@ func TestSuite(t *testing.T) {
 		Assess("rule is in terminal state", ruleInTerminalState(testRuleName, testBusName, tags)).
 		Assess("delete rule", deleteRule(testRuleName, testBusName)).
 		Teardown(deleteBus(testBusName)).
-		Feature()*/
+		Feature()
 
 	archive := features.New("EventBridge Archive CRUD").
 		Setup(setupBus(testBusName, tags)).
@@ -72,7 +56,19 @@ func TestSuite(t *testing.T) {
 		Teardown(deleteBus(testBusName)).
 		Feature()
 
-	/*	e2e := features.New("EventBridge E2E").
+	endpoint := features.New("EventBridge Endpoint CRUD").
+		Setup(setupBuses(testBusName, envCfg.Region, envCfg.SecondaryRegion, tags)).
+		Assess("create Endpoint", createEndpoint(testEndpointName, testBusName, envCfg.SecondaryRegion)).
+		Assess("Endpoint has synced", endpointSynced(testEndpointName)).
+		Assess("update Endpoint", updateEndpoint(testEndpointName)).
+		Assess("delete Endpoint", deleteEndpoint(testEndpointName)).
+		Teardown(deleteBuses([]string{
+			testBusName + "-primary",
+			testBusName + "-secondary",
+		})).
+		Feature()
+
+	e2e := features.New("EventBridge E2E").
 		Setup(setupBus(testBusName, tags)).
 		Assess("create rule", createRule(testRuleName, testBusName, tags)).
 		Assess("rule has synced", ruleSynced(testRuleName, testBusName, tags)).
@@ -80,6 +76,6 @@ func TestSuite(t *testing.T) {
 		Assess("delete rule", deleteRule(testRuleName, testBusName)).
 		Teardown(deleteBus(testBusName)).
 		Feature()
-	*/
-	testEnv.Test(t, ctrl, archive)
+
+	testEnv.Test(t, ctrl, bus, rule, invalidRule, archive, endpoint, e2e)
 }

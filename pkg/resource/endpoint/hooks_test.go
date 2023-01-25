@@ -179,7 +179,7 @@ func Test_validateEndpointSpec(t *testing.T) {
 					},
 				},
 			},
-			wantErr: "\"spec.roleARN\" cannot be unset if it was set before",
+			wantErr: "unsetting \"spec.roleARN\" is not supported",
 		},
 		{
 			name: "role and routing config added during update",
@@ -347,7 +347,6 @@ func Test_unsetRemovedSpecFields(t *testing.T) {
 				},
 			},
 			wantInput: &eventbridge.UpdateEndpointInput{
-				Description: &emtpyString,
 				EventBuses: []*eventbridge.EndpointEventBus{
 					{EventBusArn: aws.String("arn:aws:events:us-east-1:123456789012:myApplicationBus")},
 					{EventBusArn: aws.String("arn:aws:events:us-east-2:123456789012:myApplicationBus")},

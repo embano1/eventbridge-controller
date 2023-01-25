@@ -1,0 +1,18 @@
+apiVersion: eventbridge.services.k8s.aws/v1alpha1
+kind: Rule
+metadata:
+  name: scheduled-rule-01-eu-central-1
+  annotations:
+    services.k8s.aws/region: eu-central-1
+spec:
+  name: scheduled-rule-01
+  description: "ACK EventBridge Scheduled Rule"
+  scheduleExpression: "rate(1 minute)"
+  targets:
+    - arn: arn:aws:logs:eu-central-1:331505801289:log-group:/aws/events/ack
+      id: rule-01-eu-central-1-cw-target
+      inputTransformer: 
+        inputTemplate: "{\"message\":\"Hello World from ACK for EventBridge\"}"
+  tags:
+    - key: tag-01
+      value: value-01

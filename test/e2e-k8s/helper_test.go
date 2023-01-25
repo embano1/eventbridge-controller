@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	svcsdk "github.com/aws/aws-sdk-go/service/eventbridge"
+	r53svcsdk "github.com/aws/aws-sdk-go/service/route53"
 	sqssvcsdk "github.com/aws/aws-sdk-go/service/sqs"
 	"gotest.tools/v3/assert"
 	"k8s.io/api/apps/v1"
@@ -107,6 +108,35 @@ func archiveFor(name, namespace, busArn, pattern string) eventbridge.Archive {
 	}
 }
 
+func endpointFor(name, namespace, primaryBusARN, secondaryBusARN, secondaryRegion, healthcheckID string) eventbridge.Endpoint {
+	return eventbridge.Endpoint{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Spec: eventbridge.EndpointSpec{
+			EventBuses: []*eventbridge.EndpointEventBus{
+				{EventBusARN: aws.String(primaryBusARN)},
+				{EventBusARN: aws.String(secondaryBusARN)},
+			},
+			Name: aws.String(name),
+			ReplicationConfig: &eventbridge.ReplicationConfig{
+				State: aws.String("DISABLED"),
+			},
+			RoutingConfig: &eventbridge.RoutingConfig{
+				FailoverConfig: &eventbridge.FailoverConfig{
+					Primary: &eventbridge.Primary{
+						HealthCheck: aws.String("arn:aws:route53:::healthcheck/" + healthcheckID),
+					},
+					Secondary: &eventbridge.Secondary{
+						Route: aws.String(secondaryRegion),
+					},
+				},
+			},
+		},
+	}
+}
+
 func ebSDKClient(t *testing.T) *svcsdk.EventBridge {
 	s, err := session.NewSession(&aws.Config{
 		Region: aws.String(envCfg.Region),
@@ -125,6 +155,69 @@ func sqsSDKClient() (*sqssvcsdk.SQS, error) {
 	}
 
 	return sqssvcsdk.New(s), nil
+}
+
+func route53SDKClient() (*r53svcsdk.Route53, error) {
+	s, err := session.NewSession(&aws.Config{
+		Region: aws.String(envCfg.Region),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create aws session: %w", err)
+	}
+
+	return r53svcsdk.New(s), nil
+}
+
+func createHealthCheck(name string, _ []*eventbridge.Tag) env.Func {
+	return func(ctx context.Context, config *envconf.Config) (context.Context, error) {
+		routesdk, err := route53SDKClient()
+		if err != nil {
+			return ctx, fmt.Errorf("create route53 sdk client: %w", err)
+		}
+
+		cfg := r53svcsdk.HealthCheckConfig{
+			Disabled:                 aws.Bool(false),
+			EnableSNI:                aws.Bool(true),
+			FailureThreshold:         aws.Int64(3),
+			FullyQualifiedDomainName: aws.String("events.eu-west-1.amazonaws.com"),
+			Inverted:                 aws.Bool(false),
+			MeasureLatency:           aws.Bool(false),
+			Port:                     aws.Int64(443),
+			RequestInterval:          aws.Int64(10),
+			Type:                     aws.String("HTTPS"),
+		}
+		req := r53svcsdk.CreateHealthCheckInput{
+			CallerReference:   aws.String(name),
+			HealthCheckConfig: &cfg,
+		}
+		resp, err := routesdk.CreateHealthCheckWithContext(ctx, &req)
+		if err != nil {
+			return nil, fmt.Errorf("create route53 health check: %w", err)
+		}
+
+		healthCheckID = *resp.HealthCheck.Id
+		klog.V(1).Infof("created test route53 health check %q", healthCheckID)
+
+		return ctx, nil
+	}
+}
+
+func deleteHealthCheck() env.Func {
+	return func(ctx context.Context, config *envconf.Config) (context.Context, error) {
+		routesdk, err := route53SDKClient()
+		if err != nil {
+			return ctx, fmt.Errorf("create route53 sdk client: %w", err)
+		}
+
+		req := r53svcsdk.DeleteHealthCheckInput{HealthCheckId: aws.String(healthCheckID)}
+		_, err = routesdk.DeleteHealthCheckWithContext(ctx, &req)
+		if err != nil {
+			return nil, fmt.Errorf("delete route53 health check: %w", err)
+		}
+		klog.V(1).Infof("deleted test route53 health check %q", healthCheckID)
+
+		return ctx, nil
+	}
 }
 
 func createSQSTestQueue(name string, tags []*eventbridge.Tag) env.Func {

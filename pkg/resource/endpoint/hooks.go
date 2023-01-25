@@ -27,13 +27,18 @@ const (
 )
 
 var (
-	requeueWaitWhileDeleting = ackrequeue.NeededAfter(
-		fmt.Errorf("endpoint in %q state, cannot be modified or deleted", StatusDeleting),
+	requeueWaitWhileCreating = ackrequeue.NeededAfter(
+		fmt.Errorf("endpoint in %q state, requeing", StatusCreating),
 		defaultRequeueDelay,
 	)
 
-	requeueWaitWhileCreating = ackrequeue.NeededAfter(
-		fmt.Errorf("endpoint in %q state, requeing", StatusCreating),
+	requeueWaitWhileUpdating = ackrequeue.NeededAfter(
+		fmt.Errorf("endpoint in %q state, cannot be modified or deleted", StatusUpdating),
+		defaultRequeueDelay,
+	)
+
+	requeueWaitWhileDeleting = ackrequeue.NeededAfter(
+		fmt.Errorf("endpoint in %q state, cannot be modified or deleted", StatusDeleting),
 		defaultRequeueDelay,
 	)
 )
@@ -56,6 +61,15 @@ func validateEndpointSpec(delta *ackcompare.Delta, spec v1alpha1.EndpointSpec) e
 		return fmt.Errorf("invalid Spec: %q must be set",
 			"spec.routingConfig.failoverConfig", // currently only field in shape
 		)
+	}
+
+	if delta != nil && delta.DifferentAt("Spec.RoleARN") {
+		roleARN := spec.RoleARN
+		if roleARN == nil || *roleARN == "" {
+			return fmt.Errorf("invalid Spec: unsetting %q is not supported",
+				"spec.roleARN", // currently only field in shape
+			)
+		}
 	}
 
 	return nil
@@ -93,21 +107,6 @@ func validateEventBus(spec v1alpha1.EndpointSpec) error {
 		)
 	}
 	return nil
-}
-
-// endpointInTerminalState returns whether the supplied Endpoint is in a terminal
-// state
-func endpointInTerminalState(r *resource) bool {
-	if r.ko.Status.State == nil {
-		return false
-	}
-	state := *r.ko.Status.State
-	for _, s := range TerminalStatuses {
-		if state == s {
-			return true
-		}
-	}
-	return false
 }
 
 // endpointAvailable returns true if the supplied Endpoint is in an available
@@ -173,11 +172,25 @@ func customPreCompare(
 	a *resource,
 	b *resource,
 ) {
+	aDescr := a.ko.Spec.Description
+	bDescr := b.ko.Spec.Description
+
+	if !equalStrings(aDescr, bDescr) {
+		delta.Add("Spec.Description", aDescr, bDescr)
+	}
+
 	aRole := a.ko.Spec.RoleARN
 	bRole := b.ko.Spec.RoleARN
 
 	if !equalStrings(aRole, bRole) {
 		delta.Add("Spec.RoleARN", aRole, bRole)
+	}
+
+	aReplCfg := a.ko.Spec.ReplicationConfig
+	bReplCfg := b.ko.Spec.ReplicationConfig
+
+	if !equalReplicationConfigs(aReplCfg, bReplCfg) {
+		delta.Add("Spec.ReplicationConfig", aReplCfg, bReplCfg)
 	}
 }
 
@@ -191,4 +204,17 @@ func equalStrings(a, b *string) bool {
 	}
 
 	return (*a == "" && b == nil) || *a == *b
+}
+
+func equalReplicationConfigs(a, b *v1alpha1.ReplicationConfig) bool {
+	// assumes API always returns replication config
+	if (a == nil || a.State == nil || *a.State == "" || *a.State == "ENABLED") && *b.State == "ENABLED" {
+		return true
+	}
+
+	if a != nil && a.State != nil && *a.State == "DISABLED" && *b.State == "DISABLED" {
+		return true
+	}
+
+	return false
 }

@@ -12,7 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/eventbridge"
 	"gotest.tools/v3/assert"
-	v12 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/e2e-framework/klient/k8s"
 	"sigs.k8s.io/e2e-framework/klient/k8s/resources"
 	"sigs.k8s.io/e2e-framework/klient/wait"
@@ -58,9 +58,9 @@ func archiveSynced(name string) features.Func {
 		err = r.Get(ctx, name, namespace, &archive)
 		assert.NilError(t, err)
 
-		syncedCondition := conditions.New(r).ResourceMatch(&archive, func(rule k8s.Object) bool {
-			for _, cond := range rule.(*v1alpha1.Archive).Status.Conditions {
-				if cond.Type == ackcore.ConditionTypeResourceSynced && cond.Status == v12.ConditionTrue {
+		syncedCondition := conditions.New(r).ResourceMatch(&archive, func(archive k8s.Object) bool {
+			for _, cond := range archive.(*v1alpha1.Archive).Status.Conditions {
+				if cond.Type == ackcore.ConditionTypeResourceSynced && cond.Status == corev1.ConditionTrue {
 					return true
 				}
 			}
@@ -99,33 +99,34 @@ func updateArchive(name string) features.Func {
 		err = r.Get(ctx, name, namespace, &archive)
 		assert.NilError(t, err)
 
-		spec := archive.Spec
-		spec.Description = aws.String("test description")
-		spec.RetentionDays = aws.Int64(5)
-		spec.EventPattern = aws.String(`{"source": ["some.source"]}`)
+		want := archive.Spec
+		want.Description = aws.String("test description")
+		want.RetentionDays = aws.Int64(5)
+		want.EventPattern = aws.String(`{"source": ["some.source"]}`)
 
+		archive.Spec = want
 		err = r.Update(ctx, &archive)
 		assert.NilError(t, err, "update archive: update kubernetes resource")
 
 		sdk := ebSDKClient(t)
 
 		archiveUpdated := func() (bool, error) {
-			resp, err := sdk.DescribeArchiveWithContext(ctx, &eventbridge.DescribeArchiveInput{
+			got, err := sdk.DescribeArchiveWithContext(ctx, &eventbridge.DescribeArchiveInput{
 				ArchiveName: aws.String(name),
 			})
 			if err != nil {
 				return false, fmt.Errorf("describe archive: %w", err)
 			}
 
-			if resp.Description == spec.Description {
+			if *got.Description != *want.Description {
 				return false, nil
 			}
 
-			if resp.RetentionDays == spec.RetentionDays {
+			if *got.RetentionDays != *want.RetentionDays {
 				return false, nil
 			}
 
-			if resp.EventPattern == spec.EventPattern {
+			if *got.EventPattern != *want.EventPattern {
 				return false, nil
 			}
 

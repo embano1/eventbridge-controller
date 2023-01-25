@@ -42,13 +42,6 @@ func newResourceDelta(
 	}
 	customPreCompare(delta, a, b)
 
-	if ackcompare.HasNilDifference(a.ko.Spec.Description, b.ko.Spec.Description) {
-		delta.Add("Spec.Description", a.ko.Spec.Description, b.ko.Spec.Description)
-	} else if a.ko.Spec.Description != nil && b.ko.Spec.Description != nil {
-		if *a.ko.Spec.Description != *b.ko.Spec.Description {
-			delta.Add("Spec.Description", a.ko.Spec.Description, b.ko.Spec.Description)
-		}
-	}
 	if !reflect.DeepEqual(a.ko.Spec.EventBuses, b.ko.Spec.EventBuses) {
 		delta.Add("Spec.EventBuses", a.ko.Spec.EventBuses, b.ko.Spec.EventBuses)
 	}
@@ -57,17 +50,6 @@ func newResourceDelta(
 	} else if a.ko.Spec.Name != nil && b.ko.Spec.Name != nil {
 		if *a.ko.Spec.Name != *b.ko.Spec.Name {
 			delta.Add("Spec.Name", a.ko.Spec.Name, b.ko.Spec.Name)
-		}
-	}
-	if ackcompare.HasNilDifference(a.ko.Spec.ReplicationConfig, b.ko.Spec.ReplicationConfig) {
-		delta.Add("Spec.ReplicationConfig", a.ko.Spec.ReplicationConfig, b.ko.Spec.ReplicationConfig)
-	} else if a.ko.Spec.ReplicationConfig != nil && b.ko.Spec.ReplicationConfig != nil {
-		if ackcompare.HasNilDifference(a.ko.Spec.ReplicationConfig.State, b.ko.Spec.ReplicationConfig.State) {
-			delta.Add("Spec.ReplicationConfig.State", a.ko.Spec.ReplicationConfig.State, b.ko.Spec.ReplicationConfig.State)
-		} else if a.ko.Spec.ReplicationConfig.State != nil && b.ko.Spec.ReplicationConfig.State != nil {
-			if *a.ko.Spec.ReplicationConfig.State != *b.ko.Spec.ReplicationConfig.State {
-				delta.Add("Spec.ReplicationConfig.State", a.ko.Spec.ReplicationConfig.State, b.ko.Spec.ReplicationConfig.State)
-			}
 		}
 	}
 	if ackcompare.HasNilDifference(a.ko.Spec.RoutingConfig, b.ko.Spec.RoutingConfig) {

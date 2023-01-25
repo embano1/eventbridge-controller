@@ -4,7 +4,6 @@ package e2e
 
 import (
 	"context"
-	"log"
 	"os"
 	"testing"
 
@@ -26,8 +25,11 @@ type envConfig struct {
 	SecretKey    string `envconfig:"AWS_SECRET_ACCESS_KEY" required:"true"`
 	SessionToken string `envconfig:"AWS_SESSION_TOKEN" required:"true"`
 
+	// global endpoints overwrite
+	SecondaryRegion string `envconfig:"AWS_SECONDARY_REGION" required:"true" default:"eu-west-1"`
+
 	// kind configuration
-	KindCluster string `envconfig:"KIND_CLUSTER_NAME" default:"ack"`
+	KindCluster string `envconfig:"KIND_CLUSTER_NAME" required:"true" default:"ack"`
 	CtrlImage   string `envconfig:"ACK_CONTROLLER_IMAGE" required:"true"`
 }
 
@@ -48,10 +50,12 @@ var (
 	testEnv env.Environment
 	envCfg  envConfig
 
-	// test queue
-	queueName string
-	queueARN  string
-	queueURL  string
+	// test queue & route 53 healthcheck
+	queueName       string
+	queueARN        string
+	queueURL        string
+	healthCheckName string
+	healthCheckID   string
 
 	// common tags
 	tags []*ebv1alpha1.Tag
@@ -62,11 +66,16 @@ func TestMain(m *testing.M) {
 
 	cfg, err := envconf.NewFromFlags()
 	if err != nil {
-		log.Fatalf("envconf failed: %s", err)
+		klog.Fatalf("environment variable parsing failed: %s", err)
+	}
+
+	if envCfg.Region == envCfg.SecondaryRegion {
+		klog.Fatalf("%q and %q must be different", "AWS_DEFAULT_REGION", "AWS_SECONDARY_REGION")
 	}
 
 	testEnv = env.NewWithConfig(cfg)
 	queueName = envconf.RandomName("ack-e2e-queue", 20)
+	healthCheckName = envconf.RandomName("ack-e2e-hc", 20)
 
 	tags = []*ebv1alpha1.Tag{{
 		Key:   aws.String("ack-e2e"),
@@ -75,6 +84,7 @@ func TestMain(m *testing.M) {
 
 	klog.V(1).Infof("setting up test environment with kind cluster %q", envCfg.KindCluster)
 	testEnv.Setup(
+		createHealthCheck(healthCheckName, tags),
 		createSQSTestQueue(queueName, tags),
 		envfuncs.CreateKindCluster(envCfg.KindCluster),
 		envfuncs.SetupCRDs(baseCRDPath, "*"),
@@ -83,6 +93,7 @@ func TestMain(m *testing.M) {
 
 	testEnv.Finish(
 		envfuncs.DeleteNamespace(ackNamespace),
+		deleteHealthCheck(),
 		destroySQSTestQueue(),
 		envfuncs.TeardownCRDs(baseCRDPath, "*"),
 		envfuncs.TeardownCRDs(commonCRDPath, "*"),

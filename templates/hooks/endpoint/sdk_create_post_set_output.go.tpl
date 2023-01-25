@@ -1,4 +1,4 @@
 	if !endpointAvailable(&resource{ko}) {
 		// requeue: endpoint usually not immediately available i.e., CREATING or CREATE_FAILED
-		return res, requeueWaitWhileCreating
+		return &resource{ko}, requeueWaitWhileCreating
 	}
