@@ -34,6 +34,7 @@ func mutateController(image string, env []corev1.EnvVar) decoder.DecodeOption {
 			return nil
 		}
 
+		podSpec := &d.Spec.Template.Spec
 		container := &d.Spec.Template.Spec.Containers[0]
 
 		// only patch the ack controller in case of multiple deployments
@@ -56,6 +57,31 @@ func mutateController(image string, env []corev1.EnvVar) decoder.DecodeOption {
 		envVars := container.Env
 		envVars = append(envVars, env...)
 		container.Env = envVars
+
+		// go coverage data handling
+		const coverVolName = "coverdir"
+
+		coverMount := corev1.VolumeMount{
+			Name:      coverVolName,
+			ReadOnly:  false,
+			MountPath: coverDirPath,
+		}
+		mounts := container.VolumeMounts
+		mounts = append(mounts, coverMount)
+		container.VolumeMounts = mounts
+
+		coverVol := corev1.Volume{
+			Name: coverVolName,
+			VolumeSource: corev1.VolumeSource{
+				HostPath: &corev1.HostPathVolumeSource{
+					Path: coverDirPath,
+				},
+			},
+		}
+
+		volumes := podSpec.Volumes
+		volumes = append(volumes, coverVol)
+		podSpec.Volumes = volumes
 		return nil
 	})
 }

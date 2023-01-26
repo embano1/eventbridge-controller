@@ -19,11 +19,13 @@ var (
 func TestSuite(t *testing.T) {
 	// required for other features
 	ctrl := features.New("EventBridge Controller").
+		WithLabel("feature", "ctrl").
 		Setup(createController()).
 		Assess("controller running without leader election", controllerRunning()).
 		Feature()
 
 	bus := features.New("EventBridge Event Bus CRUD").
+		WithLabel("feature", "bus").
 		Assess("create event bus", createEventBus(testBusName, tags)).
 		Assess("event bus has synced", eventBusSynced(testBusName, tags)).
 		Assess("update event bus", updateEventBus(testBusName)).
@@ -31,6 +33,7 @@ func TestSuite(t *testing.T) {
 		Feature()
 
 	rule := features.New("EventBridge Rule CRUD").
+		WithLabel("feature", "rule").
 		Setup(setupBus(testBusName, tags)).
 		Assess("create rule", createRule(testRuleName, testBusName, tags)).
 		Assess("rule has synced", ruleSynced(testRuleName, testBusName, tags)).
@@ -40,6 +43,7 @@ func TestSuite(t *testing.T) {
 		Feature()
 
 	invalidRule := features.New("EventBridge Rule invalid in terminal state").
+		WithLabel("feature", "rule").
 		Setup(setupBus(testBusName, tags)).
 		Assess("create invalid rule", createInvalidRule(testRuleName, testBusName, tags)).
 		Assess("rule is in terminal state", ruleInTerminalState(testRuleName, testBusName, tags)).
@@ -48,6 +52,7 @@ func TestSuite(t *testing.T) {
 		Feature()
 
 	archive := features.New("EventBridge Archive CRUD").
+		WithLabel("feature", "archive").
 		Setup(setupBus(testBusName, tags)).
 		Assess("create archive", createArchive(testArchiveName)).
 		Assess("archive has synced", archiveSynced(testArchiveName)).
@@ -57,6 +62,7 @@ func TestSuite(t *testing.T) {
 		Feature()
 
 	endpoint := features.New("EventBridge Endpoint CRUD").
+		WithLabel("feature", "endpoint").
 		Setup(setupBuses(testBusName, envCfg.Region, envCfg.SecondaryRegion, tags)).
 		Assess("create Endpoint", createEndpoint(testEndpointName, testBusName, envCfg.SecondaryRegion)).
 		Assess("Endpoint has synced", endpointSynced(testEndpointName)).
@@ -69,6 +75,7 @@ func TestSuite(t *testing.T) {
 		Feature()
 
 	e2e := features.New("EventBridge E2E").
+		WithLabel("feature", "e2e").
 		Setup(setupBus(testBusName, tags)).
 		Assess("create rule", createRule(testRuleName, testBusName, tags)).
 		Assess("rule has synced", ruleSynced(testRuleName, testBusName, tags)).

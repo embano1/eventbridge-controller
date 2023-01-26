@@ -28,6 +28,9 @@ const (
 	rbacFilePath       = "../../config/rbac"
 	controllerName     = "ack-eventbridge-controller"
 	ackNamespace       = "ack-system"
+
+	// go 1.20 binary coverage
+	coverDirPath = "/coverdata"
 )
 
 func createController() features.Func {
@@ -36,7 +39,7 @@ func createController() features.Func {
 		r, err := resources.New(c.Client().RESTConfig())
 		assert.NilError(t, err)
 
-		awsEnvs := []v1.EnvVar{
+		envs := []v1.EnvVar{
 			{
 				Name:  "AWS_REGION",
 				Value: envCfg.Region,
@@ -53,15 +56,21 @@ func createController() features.Func {
 				Name:  "AWS_SESSION_TOKEN",
 				Value: envCfg.SessionToken,
 			},
+			{
+				Name:  "GOCOVERDIR",
+				Value: coverDirPath,
+			},
 		}
 
+		// controller manifests
 		err = decoder.DecodeEachFile(
 			ctx, os.DirFS(controllerFilePath), filterPattern,
 			decoder.CreateHandler(r),
-			mutateController(envCfg.CtrlImage, awsEnvs), // update manifest values for test
+			mutateController(envCfg.CtrlImage, envs), // update manifest values for test
 		)
 		assert.NilError(t, err)
 
+		// rbac manifests
 		err = decoder.DecodeEachFile(
 			ctx, os.DirFS(rbacFilePath), filterPattern,
 			decoder.CreateHandler(r),

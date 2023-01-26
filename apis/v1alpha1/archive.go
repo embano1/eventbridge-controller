@@ -33,8 +33,8 @@ type ArchiveSpec struct {
 	// An event pattern to use to filter events sent to the archive.
 	EventPattern *string `json:"eventPattern,omitempty"`
 	// The ARN of the event bus that sends events to the archive.
-	// +kubebuilder:validation:Required
-	EventSourceARN *string `json:"eventSourceARN"`
+	EventSourceARN *string                                  `json:"eventSourceARN,omitempty"`
+	EventSourceRef *ackv1alpha1.AWSResourceReferenceWrapper `json:"eventSourceRef,omitempty"`
 	// The number of days to retain events for. Default value is 0. If set to 0,
 	// events are retained indefinitely
 	RetentionDays *int64 `json:"retentionDays,omitempty"`

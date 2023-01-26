@@ -6,7 +6,7 @@ metadata:
     services.k8s.aws/region: eu-central-1
 spec:
   name: filter-rule-01
-  description: "ACK EventBridge Filter Rule"
+  description: "ACK EventBridge Filter Rule to SQS using event bus reference"
   eventBusRef:
     from:
       name: bus-01-eu-central-1
@@ -15,8 +15,12 @@ spec:
       "detail-type":["event.for.ack.v0"]
     }
   targets:
-    - arn: arn:aws:logs:eu-central-1:331505801289:log-group:/aws/events/ack
-      id: rule-01-eu-central-1-cw-target
+    - arn: arn:aws:sqs:eu-central-1:331505801289:ack
+      id: rule-01-eu-central-1-sqs-target
+      retryPolicy:
+        maximumRetryAttempts: 0 # no retries
+      deadLetterConfig:
+        arn: arn:aws:sqs:eu-central-1:331505801289:dlq
   tags:
     - key: tag-01
       value: value-01

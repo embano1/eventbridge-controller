@@ -1,19 +1,19 @@
 # TODO Project
-# [] CRD custom printer columns - currently not possible
+# [X] CRD custom printer columns
 # [X] E2E
 # [x] update event bus (allow tag modifications)
 # [X] verify immutability - currently not possible
 # [x] CRD shortnames
 # [] empty spec is allowed (so required name check is skipped)
 # [] ackerr.NotImplemented does not lead to terminal err condition
-# [] If you are updating an existing rule, any tags you specify in the PutRule operation are ignored. To update the tags of an existing rule, use TagResource and UntagResource.
-# [] Before you can delete the rule, you must remove all targets, using RemoveTargets.
+# [X] If you are updating an existing rule, any tags you specify in the PutRule operation are ignored. To update the tags of an existing rule, use TagResource and UntagResource.
+# [X] Before you can delete the rule, you must remove all targets, using RemoveTargets.
 # [] not in GA: discuss with users whether to allow "force" when deleting targets from a managed rule (and even to delete managed rule) (use CR annotation)
 # [] make default eventbus "" in putrule required instead of empty string for explicitness?
 # [] ask Rishi how JSON event patterns are handled in API (spaces, order, etc ignored when creating/updating a rule pattern?)
 # [] ask Amine about throttling/thunderhing herd and retries/jitter in runtime
 # [] bug Rishi on model updates when EB adds targets, etc.
-# [] review rule validation with Rishi/Nick Smith (schedules, len targets)
+# [X] review rule validation with Rishi/Nick Smith (schedules, len targets)
 # [] rishi: do we always need rolearn in target?
 
 ignore:
@@ -39,11 +39,9 @@ resources:
       EventSourceARN:
         is_immutable: true
         is_required: true
-      # TODO(@embano1) talk to Amine if this is nuts
-#      EventSourceArn:
-#        references:
-#          resource: EventBus
-#          path: Status.AckResourceMetadata.Arn
+        references:
+          resource: EventBus
+          path: Status.ACKResourceMetadata.ARN
     tags:
       ignore: true
     hooks:
@@ -182,9 +180,7 @@ resources:
         is_immutable: true
       Targets:
         custom_field:
-          list_of: Target # how can I add comment to the generated code?
-#      Targets.ARN: <- does not currently work
-#        is_required: true
+          list_of: Target # note: does not add comment to generated code
         compare:
           is_ignored: true
     hooks:

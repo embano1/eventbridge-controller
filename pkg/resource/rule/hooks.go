@@ -37,6 +37,20 @@ func validateRuleSpec(spec v1alpha1.RuleSpec) error {
 			"spec.scheduleExpression",
 		)
 	}
+
+	// until code-gen can generate required markers for custom_field
+	for _, t := range spec.Targets {
+		arn := t.ARN
+		id := t.ID
+
+		if arn == nil || *arn == "" || id == nil || *id == "" {
+			return fmt.Errorf("invalid Spec: %q and %q must be specified for each target",
+				"arn",
+				"id",
+			)
+		}
+	}
+
 	return nil
 }
 

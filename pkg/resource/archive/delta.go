@@ -69,6 +69,9 @@ func newResourceDelta(
 			delta.Add("Spec.EventSourceARN", a.ko.Spec.EventSourceARN, b.ko.Spec.EventSourceARN)
 		}
 	}
+	if !reflect.DeepEqual(a.ko.Spec.EventSourceRef, b.ko.Spec.EventSourceRef) {
+		delta.Add("Spec.EventSourceRef", a.ko.Spec.EventSourceRef, b.ko.Spec.EventSourceRef)
+	}
 	if ackcompare.HasNilDifference(a.ko.Spec.RetentionDays, b.ko.Spec.RetentionDays) {
 		delta.Add("Spec.RetentionDays", a.ko.Spec.RetentionDays, b.ko.Spec.RetentionDays)
 	} else if a.ko.Spec.RetentionDays != nil && b.ko.Spec.RetentionDays != nil {

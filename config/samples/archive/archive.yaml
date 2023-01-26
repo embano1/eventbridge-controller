@@ -1,10 +1,15 @@
 apiVersion: eventbridge.services.k8s.aws/v1alpha1
 kind: Archive
 metadata:
-  name: bus-01-archive
+  name: archive-01-eu-central-1
+  annotations:
+    services.k8s.aws/region: eu-central-1
 spec:
-  archiveName: bus-01-archive
-  eventSourceARN: arn:aws:events:eu-central-1:331505801289:event-bus/bus-01
+  archiveName: archive-01
+  description: "EventBridge Archive using event source reference to a bus"
+  eventSourceRef:
+    from:
+      name: bus-01-eu-central-1
   retentionDays: 10
   eventPattern: |
     {

@@ -172,6 +172,11 @@ func (in *ArchiveSpec) DeepCopyInto(out *ArchiveSpec) {
 		*out = new(string)
 		**out = **in
 	}
+	if in.EventSourceRef != nil {
+		in, out := &in.EventSourceRef, &out.EventSourceRef
+		*out = new(corev1alpha1.AWSResourceReferenceWrapper)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.RetentionDays != nil {
 		in, out := &in.RetentionDays, &out.RetentionDays
 		*out = new(int64)

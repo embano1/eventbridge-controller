@@ -6,7 +6,7 @@ metadata:
     services.k8s.aws/region: eu-central-1
 spec:
   name: endpoint-01
-  description: "ACK EventBridge Endpoint"
+  description: "ACK EventBridge Endpoint with disabled replication and without role arn"
   eventBuses:
     - eventBusARN: arn:aws:events:eu-central-1:331505801289:event-bus/bus-01
     - eventBusARN: arn:aws:events:eu-west-1:331505801289:event-bus/bus-01
@@ -18,4 +18,3 @@ spec:
         route: eu-west-1
   replicationConfig:
     state: DISABLED
-  # roleARN: arn:aws:iam::331505801289:role/service-role/Amazon_EventBridge_Invoke_Api_Destination_1263133304

@@ -36,6 +36,38 @@ func Test_validateRuleSpec(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "invalid target (missing arn)",
+			args: args{
+				spec: v1alpha1.RuleSpec{
+					State:        aws.String("ENABLED"),
+					EventPattern: aws.String(`{"some":"pattern"}`),
+					Targets: []*v1alpha1.Target{
+						{
+							ARN: nil,
+							ID:  aws.String("some-id"),
+						},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid target (missing id)",
+			args: args{
+				spec: v1alpha1.RuleSpec{
+					State:        aws.String("ENABLED"),
+					EventPattern: aws.String(`{"some":"pattern"}`),
+					Targets: []*v1alpha1.Target{
+						{
+							ARN: aws.String("some-arn"),
+							ID:  nil,
+						},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
 			name: "invalid state (lower case)",
 			args: args{
 				spec: v1alpha1.RuleSpec{

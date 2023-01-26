@@ -1,0 +1,8 @@
+apiVersion: kind.x-k8s.io/v1alpha4
+kind: Cluster
+nodes:
+- role: control-plane
+- role: worker
+  extraMounts:
+  - hostPath: /Users/mgasch/go/src/github.com/aws-controllers-k8s/eventbridge-controller/coverdata
+    containerPath: /coverdata
